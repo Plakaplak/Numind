@@ -51,6 +51,16 @@
     if (bc) bc.postMessage('saved');
   }
 
+  /* ----- Penyimpanan umum (dipakai untuk akun) ----- */
+  async function getKV(key) {
+    if (mode === 'idb') return run('kv', 'readonly', s => s.get(key));
+    try { const raw = localStorage.getItem('kasproyek.' + key); return raw ? JSON.parse(raw) : undefined; } catch (e) { return undefined; }
+  }
+  async function setKV(key, val) {
+    if (mode === 'idb') await run('kv', 'readwrite', s => s.put(val, key));
+    else localStorage.setItem('kasproyek.' + key, JSON.stringify(val));
+  }
+
   /* ----- Foto ----- */
   async function putPhoto(id, rec) {
     if (mode === 'idb') return run('photos', 'readwrite', s => s.put(rec, id));
@@ -79,9 +89,17 @@
     urlCache.set(id, u);
     return u;
   }
+  /** Hapus data keuangan (state dan foto) tetapi biarkan akun pengguna. */
+  async function clearData() {
+    if (mode === 'idb') { await run('kv', 'readwrite', s => s.delete('state')); await run('photos', 'readwrite', s => s.clear()); }
+    else { localStorage.removeItem('kasproyek.state'); memPhotos.clear(); }
+    for (const u of urlCache.values()) URL.revokeObjectURL(u);
+    urlCache.clear();
+  }
+  /** Hapus semuanya, termasuk akun. */
   async function clearAll() {
     if (mode === 'idb') { await run('kv', 'readwrite', s => s.clear()); await run('photos', 'readwrite', s => s.clear()); }
-    else { localStorage.removeItem('kasproyek.state'); memPhotos.clear(); }
+    else { localStorage.removeItem('kasproyek.state'); localStorage.removeItem('kasproyek.auth'); memPhotos.clear(); }
     for (const u of urlCache.values()) URL.revokeObjectURL(u);
     urlCache.clear();
   }
@@ -181,5 +199,5 @@
     return n;
   }
 
-  root.DB = { init, mode: () => mode, loadState, saveState, onRemoteChange, putPhoto, getPhoto, deletePhoto, photoURL, clearAll, savePhotoFile, gcPhotos, exportPhotos, importPhotos };
+  root.DB = { init, mode: () => mode, loadState, saveState, onRemoteChange, putPhoto, getPhoto, deletePhoto, photoURL, getKV, setKV, clearData, clearAll, savePhotoFile, gcPhotos, exportPhotos, importPhotos };
 })(typeof self !== 'undefined' ? self : this);

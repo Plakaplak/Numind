@@ -1,6 +1,6 @@
 # KasProyek
 
-Aplikasi web progresif (PWA) untuk mencatat pemasukan, pengeluaran, dan reimbursement di kantor kreatif. Cocok untuk Producer yang menalangi biaya project, Finance yang memeriksa nota, dan Director yang menyetujui.
+Aplikasi web progresif (PWA) untuk mencatat pemasukan, pengeluaran, dan reimbursement di kantor kreatif. Cocok untuk anggota Team yang menalangi biaya project, Finance yang memeriksa nota, dan Director yang menyetujui.
 
 Tidak perlu server, database, atau proses build. Semua data tersimpan di perangkat dan aplikasi tetap berjalan tanpa internet.
 
@@ -15,7 +15,7 @@ cd kasproyek
 python3 -m http.server 8080
 ```
 
-Buka `http://localhost:8080`. Tambahkan `?demo=1` (`http://localhost:8080/?demo=1`) untuk mengisi data contoh: 3 project, sekitar 35 transaksi, pengajuan yang sudah dibayar, menunggu approval, dan perlu revisi.
+Buka `http://localhost:8080`. Saat pertama dibuka, aplikasi meminta Anda membuat **akun pertama**, yang otomatis menjadi administrator (lihat [Akun dan peran](#akun-dan-peran)). Tambahkan `?demo=1` (`http://localhost:8080/?demo=1`) untuk mengisi data contoh setelah akun pertama dibuat: 3 project, sekitar 35 transaksi, pengajuan yang sudah dibayar, menunggu approval, dan perlu revisi.
 
 **Pasang untuk tim**
 
@@ -36,6 +36,28 @@ Setiap kali berkas berubah, naikkan `VERSION` di `sw.js` (misalnya `kasproyek-v1
 | Approval Center | Antrean untuk Finance dan Director: setujui, minta revisi, tolak, tandai dibayar |
 | Financial Report | Laporan per project, kategori, posisi piutang, dan petty cash |
 | Export Data | CSV dan cadangan JSON (opsional beserta foto nota) |
+| Pengguna | Khusus administrator: tambah akun, ubah peran, atur ulang kata sandi, nonaktifkan, buka atau tutup pendaftaran mandiri |
+
+## Akun dan peran
+
+Setiap orang masuk dengan email dan kata sandi sendiri. Nama yang tampil di riwayat approval dan pembayaran diambil dari akun, bukan diketik manual.
+
+| Peran | Bisa |
+|---|---|
+| Team | Mencatat pengeluaran dan pemasukan, mengunggah nota, membuat dan memperbaiki pengajuan |
+| Finance | Semua milik Team, ditambah memeriksa, menyetujui, meminta revisi, menolak, dan mencatat pembayaran |
+| Director | Sama dengan Finance: memeriksa, menyetujui, meminta revisi, menolak, dan mencatat pembayaran |
+
+**Administrator** adalah penanda terpisah dari peran: administrator mengelola pengguna dan membuka Pengaturan. Satu orang bisa Director sekaligus administrator.
+
+- **Akun pertama** otomatis menjadi administrator. Pemiliknya memilih peran awalnya (bawaan: Director).
+- **Pendaftar berikutnya** masuk sebagai Team. Administrator mengubah perannya di menu Pengguna. Perubahan berlaku saat orang itu masuk lagi, karena sesinya dicabut.
+- **Administrator juga bisa membuat akun** dengan kata sandi sementara. Pemilik akun diminta menggantinya saat masuk pertama. Setelah semua anggota tim punya akun, matikan **Izinkan orang mendaftar sendiri** di halaman Pengguna.
+- **Lupa kata sandi?** Administrator memilih **Atur ulang kata sandi** pada nama orang itu. Kata sandi disimpan sebagai hash, jadi tidak ada yang bisa melihatnya, termasuk administrator.
+- **Administrator terakhir tidak bisa dicopot atau dinonaktifkan**, dan tidak ada yang bisa menghapus atau menonaktifkan akunnya sendiri.
+- **Lima kali salah berturut-turut** mengunci percobaan masuk untuk email itu selama 30 detik, lalu berlipat ganda sampai 15 menit.
+- **Tetap masuk di perangkat ini** berlaku 30 hari. Tanpa centang itu, sesi berakhir saat tab ditutup (maksimal 12 jam). Keluar di satu tab ikut mengeluarkan tab lain.
+- **Jalan terakhir** bila satu-satunya administrator lupa kata sandi: di layar Masuk pilih **Lupa kata sandi?**, lalu hapus semua data di perangkat. Pulihkan dari cadangan JSON bila ada. Cadangan tidak memuat akun maupun kata sandi.
 
 ## Alur kerja
 
@@ -51,7 +73,7 @@ Status transaksi: Draft → Tercatat → Siap Reimburse → Menunggu Approval �
 
 ### Aturan dana
 
-- **Dana pribadi Producer**: menjadi piutang reimbursement dan bernomor `RB-YYYYMM-NNN`.
+- **Dana pribadi Team**: menjadi piutang reimbursement dan bernomor `RB-YYYYMM-NNN`.
 - **Dana perusahaan**: dihitung sebagai pemakaian petty cash dan bernomor `PC-YYYYMM-NNN`. Laporannya tetap disetujui, tetapi tidak ada pembayaran.
 - Saldo petty cash = top-up pemasukan dikurangi pengeluaran dana perusahaan.
 
@@ -69,21 +91,24 @@ manifest.webmanifest    metadata PWA
 sw.js                   service worker (offline-first)
 css/app.css             seluruh gaya, termasuk cetak
 js/core.js              logika bisnis murni (status, validasi, pengajuan, laporan, CSV, data contoh)
+js/auth.js              logika akun: daftar, masuk, hash kata sandi (PBKDF2), penguncian, sesi, peran, administrator
 js/db.js                penyimpanan IndexedDB (data dan foto), localStorage sebagai cadangan jika IndexedDB tidak tersedia
 js/ui.js                format, ikon, dialog, toast, popover
 js/shared.js            form dan tabel yang dipakai bersama
-js/views-*.js           halaman: dashboard & project, input, pengajuan & approval, laporan & ekspor
+js/views-*.js           halaman: dashboard & project, input, pengajuan & approval, laporan & ekspor, masuk/daftar & pengguna
 js/app.js               router, navigasi, pencarian, notifikasi, pemasangan PWA
 img/                    logo Numind (emas untuk header gelap, hijau untuk halaman sambutan, hitam untuk cetak) dan huruf "n" vektor
 icons/                  ikon aplikasi (huruf "n" emas di latar hijau tua)
 tools/make-icons.py     membuat ulang semua ikon; ubah warna di bagian atas berkas bila perlu
-tests/core.test.js      37 pengujian logika
+tests/core.test.js      37 pengujian logika bisnis
+tests/auth.test.js      25 pengujian logika akun
 ```
 
-Menguji logika inti:
+Menguji logika:
 
 ```bash
 node tests/core.test.js
+node tests/auth.test.js
 ```
 
 ## Logo dan ikon
@@ -94,7 +119,9 @@ node tests/core.test.js
 
 ## Batasan yang perlu diketahui
 
-- **Peran hanya pengaturan tampilan.** Producer, Finance, dan Director dipilih dari menu akun di perangkat itu. Tidak ada login, jadi siapa pun yang memegang perangkat bisa berganti peran. Untuk pemakaian lintas orang yang sebenarnya, butuh backend dengan autentikasi.
+- **Akun hanya berlaku di perangkat ini.** Akun, kata sandi, dan sesi disimpan di browser perangkat yang sama dengan datanya. Perangkat lain punya daftar akun sendiri yang kosong, jadi akun yang dibuat di komputer kantor tidak otomatis ada di ponsel. Untuk satu daftar akun yang dipakai bersama di banyak perangkat, butuh backend.
+- **Login adalah pagar aplikasi, bukan brankas data.** Kata sandi disimpan sebagai hash (PBKDF2-SHA256, 600.000 putaran, garam acak per akun) dan tidak pernah sebagai teks biasa. Tetapi project, transaksi, dan foto nota di perangkat **tidak dienkripsi**. Orang yang menguasai browser itu dan paham cara membuka DevTools bisa membaca atau mengubah data, dan melewati layar masuk. Login mencegah salah pakai dan memastikan nama serta peran tercatat dengan benar. Untuk melindungi dari orang yang sengaja berniat buruk, butuh backend dengan autentikasi dan penyimpanan di server.
+- **Masuk dan daftar butuh HTTPS atau localhost**, karena pengacakan kata sandi memakai fitur kripto browser yang hanya tersedia di koneksi aman. Dibuka lewat `http://` alamat jaringan lokal akan menampilkan pesan yang menjelaskannya.
 - **Data tersimpan per perangkat.** Dua orang di dua perangkat tidak melihat data yang sama. Untuk berpindah perangkat atau menggabungkan, pakai **Export Data → Cadangan dan pemulihan** lalu **Pulihkan dari cadangan**. Sinkronisasi otomatis antar pengguna memerlukan backend.
 - **Hapus data situs atau cache browser menghapus data aplikasi.** Aplikasi meminta penyimpanan permanen, tetapi browser boleh menolak. Unduh cadangan JSON secara berkala.
 - **Cetak / PDF** memakai dialog cetak browser (pilih "Simpan sebagai PDF"). Foto nota dilampirkan di halaman berikutnya.

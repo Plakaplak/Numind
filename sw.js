@@ -1,12 +1,12 @@
 /* KasProyek service worker — aplikasi bisa dibuka dan dipakai sepenuhnya offline.
    Strategi: cache-first untuk berkas aplikasi (stale-while-revalidate di latar),
    dengan fallback ke index.html untuk navigasi. Data pengguna ada di IndexedDB, bukan di cache. */
-const VERSION = 'kasproyek-v1.1.0';
+const VERSION = 'kasproyek-v1.2.1';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './css/app.css',
-  './js/core.js', './js/db.js', './js/ui.js', './js/shared.js',
-  './js/views-dashboard.js', './js/views-input.js', './js/views-claims.js', './js/views-report.js', './js/app.js',
+  './js/core.js', './js/auth.js', './js/db.js', './js/ui.js', './js/shared.js',
+  './js/views-dashboard.js', './js/views-input.js', './js/views-claims.js', './js/views-report.js', './js/views-auth.js', './js/app.js',
   './img/numind-gold.png', './img/numind-green.png', './img/numind-black.png', './img/numind-mark.svg',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png', './icons/favicon-32.png'
 ];

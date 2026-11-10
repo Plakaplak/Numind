@@ -46,14 +46,15 @@
       '<ol class="steps"><li><span><b>Buat project dan tentukan budget</b>Satu project untuk satu pekerjaan klien.</span></li>' +
       '<li><span><b>Catat pengeluaran harian</b>Nominal, kategori, sumber dana, dan foto nota. Boleh dicicil tiap hari.</span></li>' +
       '<li><span><b>Ajukan setelah project selesai</b>Atau gabungkan beberapa project dalam pengajuan bulanan.</span></li></ol>' +
-      '<div class="row mt" style="justify-content:center"><button class="btn btn-primary btn-lg" data-act="project-new">' + icon('plus') + 'Buat project pertama</button><button class="btn btn-lg" data-act="demo-load">Coba dengan data contoh</button></div>' +
+      '<div class="row mt" style="justify-content:center"><button class="btn btn-primary btn-lg" data-act="project-new">' + icon('plus') + 'Buat project pertama</button>' + (App.isAdmin() ? '<button class="btn btn-lg" data-act="demo-load">Coba dengan data contoh</button>' : '') + '</div>' +
       '<p class="small muted mt">Data tersimpan di perangkat ini dan bisa dipakai tanpa internet.</p></div></div>';
   }
   Act['demo-load'] = async () => {
+    if (!App.isAdmin()) return UI.toast('Data contoh hanya bisa dimuat administrator.', 'error');
     if (S().projects.length || S().transactions.length) {
       if (!(await UI.confirmBox({ title: 'Tambahkan data contoh?', message: 'Data contoh akan ditambahkan ke data yang sudah ada. Anda bisa menghapusnya lewat Pengaturan → Hapus semua data.', okText: 'Tambahkan' }))) return;
     }
-    App.commit(() => Core.seedDemo(S()), 'Data contoh dimuat. Coba ganti peran lewat menu akun untuk melihat alur approval.');
+    App.commit(() => Core.seedDemo(S()), 'Data contoh dimuat. Tambahkan akun Finance di menu Pengguna untuk mencoba alur approval.');
   };
 
   /* ---------- Dashboard ---------- */
@@ -62,7 +63,7 @@
     const claimsTotal = list => rp(sum(list, c => c.total));
     if (rev && D.waitingClaims.length) out.push({ c: 'o', n: D.waitingClaims.length, t: 'Pengajuan menunggu approval', sub: claimsTotal(D.waitingClaims), href: '#/approval' });
     if (rev && D.approvedClaims.length) out.push({ c: 'g', n: D.approvedClaims.length, t: 'Pengajuan siap dibayar', sub: claimsTotal(D.approvedClaims), href: '#/approval?tab=approved' });
-    if (D.revisionClaims.length) out.push({ c: 'o', n: D.revisionClaims.length, t: 'Pengajuan perlu revisi', sub: rev ? 'Menunggu perbaikan Producer' : 'Perbaiki lalu ajukan ulang', href: D.revisionClaims.length === 1 ? '#/claim/' + D.revisionClaims[0].id : '#/reimburse?tab=revision' });
+    if (D.revisionClaims.length) out.push({ c: 'o', n: D.revisionClaims.length, t: 'Pengajuan perlu revisi', sub: rev ? 'Menunggu perbaikan Team' : 'Perbaiki lalu ajukan ulang', href: D.revisionClaims.length === 1 ? '#/claim/' + D.revisionClaims[0].id : '#/reimburse?tab=revision' });
     if (!rev && D.waitingClaims.length) out.push({ c: 'v', n: D.waitingClaims.length, t: 'Pengajuan menunggu approval', sub: claimsTotal(D.waitingClaims), href: '#/reimburse?tab=waiting' });
     if (D.drafts.length) out.push({ c: 'w', n: D.drafts.length, t: 'Transaksi Draft tanpa nota', sub: rp(sum(D.drafts, t => t.amount)) + ' belum bisa diajukan', href: '#/receipts' });
     if (D.readyProjects.length) out.push({ c: 'g', n: D.readyProjects.length, t: D.readyProjects.length === 1 ? 'Project siap diajukan' : 'Project siap diajukan', sub: D.readyProjects.map(p => p.name).slice(0, 2).join(', '), href: '#/reimburse' });

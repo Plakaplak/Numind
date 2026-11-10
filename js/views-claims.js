@@ -127,7 +127,7 @@
       '<div class="form-grid"><div><div class="field"><span>Jenis pengajuan</span></div><div class="seg"><label><input type="radio" name="mode" value="project" data-change="wiz"' + (W.mode === 'project' ? ' checked' : '') + '>Per project</label><label><input type="radio" name="mode" value="periode" data-change="wiz"' + (W.mode === 'periode' ? ' checked' : '') + '>Per periode</label></div>' +
       '<p class="small muted" style="margin-top:6px">' + (W.mode === 'project' ? 'Seluruh pengeluaran satu project, diajukan setelah project selesai.' : 'Pengeluaran beberapa project digabung menjadi satu pengajuan bulanan.') + '</p></div>' + '<div>' + sel + '</div></div>' +
       '<fieldset style="border:0;padding:0;margin:0"><legend class="field" style="margin-bottom:6px"><span>Sumber dana</span></legend><div class="opts">' +
-      '<label class="opt"><input type="radio" name="fund" value="pribadi" data-change="wiz"' + (personal ? ' checked' : '') + '><span><b>Reimbursement</b><small>Dana pribadi Producer. Perusahaan mengganti setelah disetujui.</small></span></label>' +
+      '<label class="opt"><input type="radio" name="fund" value="pribadi" data-change="wiz"' + (personal ? ' checked' : '') + '><span><b>Reimbursement</b><small>Dana pribadi Team. Perusahaan mengganti setelah disetujui.</small></span></label>' +
       '<label class="opt"><input type="radio" name="fund" value="perusahaan" data-change="wiz"' + (!personal ? ' checked' : '') + '><span><b>Laporan petty cash</b><small>Dana operasional perusahaan. Dipertanggungjawabkan, tanpa pembayaran.</small></span></label></div></fieldset>' +
       (st.blocked ? H.banner('error', 'alert', '<b>' + el.drafts.length + ' transaksi Draft di project ini.</b> Lengkapi nota atau hapus dulu. <a href="#/receipts" data-act="dlg-close-go">Buka Upload Nota</a>') : '') +
       (!st.blocked && W.mode === 'periode' && el.drafts.length ? H.banner('warn', 'alert', '<b>' + el.drafts.length + ' transaksi Draft tidak ikut diajukan</b> karena notanya belum lengkap.') : '') +
@@ -167,7 +167,7 @@
   function claimLine(t, i, c, cap) {
     const rej = t.status === TX.REJECTED, notes = [];
     if (t.status === TX.REVISION && t.revNote) notes.push('<div class="row-note"><b>Finance:</b> ' + esc(t.revNote) + '</div>');
-    if (t.revReply && (t.status === TX.REVISION || t.status === TX.WAITING)) notes.push('<div class="row-note reply"><b>Producer:</b> ' + esc(t.revReply) + '</div>');
+    if (t.revReply && (t.status === TX.REVISION || t.status === TX.WAITING)) notes.push('<div class="row-note reply"><b>Team:</b> ' + esc(t.revReply) + '</div>');
     if (rej && t.rejectReason) notes.push('<div class="row-note rej"><b>Ditolak:</b> ' + esc(t.rejectReason) + '</div>');
     if (t.noReceipt) notes.push('<div class="row-note">Tanpa nota: ' + esc(t.noReceiptReason) + '</div>');
     if (t.dupConfirmed) notes.push('<div class="row-note">Mirip transaksi lain, dikonfirmasi saat dicatat.</div>');
@@ -190,7 +190,7 @@
     const rev = role !== 'producer';
     const co = s.settings.company || 'Perusahaan';
     let banner = '';
-    if (c.status === CL.REVISION) banner = cap.flagged ? H.banner('warn', 'undo', '<b>Finance meminta revisi untuk ' + cap.flagged + ' transaksi.</b> ' + (rev ? 'Menunggu Producer memperbaiki.' : 'Perbaiki setiap baris yang ditandai, lalu tekan Ajukan ulang.')) : '';
+    if (c.status === CL.REVISION) banner = cap.flagged ? H.banner('warn', 'undo', '<b>Finance meminta revisi untuk ' + cap.flagged + ' transaksi.</b> ' + (rev ? 'Menunggu Team memperbaiki.' : 'Perbaiki setiap baris yang ditandai, lalu tekan Ajukan ulang.')) : '';
     else if (c.status === CL.WAITING) banner = H.banner('info', 'clock', rev ? '<b>Periksa setiap bukti nota.</b> Anda bisa meminta revisi atau menolak per transaksi, lalu menyetujui sisanya.' : '<b>Menunggu approval Finance atau Director.</b> Pengajuan masih bisa ditarik selama belum disetujui.');
     else if (c.status === CL.APPROVED) banner = H.banner('ok', 'checkc', personal ? '<b>Disetujui' + (c.approvedBy ? ' oleh ' + esc(c.approvedBy) : '') + '.</b> Menunggu pembayaran reimbursement.' : '<b>Disetujui.</b> Tandai selesai untuk menutup laporan petty cash.');
     else if (c.status === CL.PAID) banner = H.banner('ok', 'coins', personal ? '<b>Sudah dibayar</b> ' + dt(c.payment && c.payment.date) + (c.payment && c.payment.method ? ' via ' + esc(c.payment.method) : '') + (c.payment && c.payment.ref ? ' · ref ' + esc(c.payment.ref) : '') + '. Laporan diarsipkan.' : '<b>Selesai</b> ' + dt(c.payment && c.payment.date) + '. Laporan petty cash diarsipkan.');
@@ -240,7 +240,7 @@
   const getC = id => S().claims.find(x => x.id === id);
   Act['claim-approve'] = async d => {
     const c = getC(d.id);
-    const note = await UI.promptBox({ title: 'Setujui pengajuan', message: c.number + ' — ' + rp(c.total) + '. Transaksi yang ditolak tidak ikut dihitung.', label: 'Catatan untuk Producer (opsional)', required: false, okText: 'Setujui' });
+    const note = await UI.promptBox({ title: 'Setujui pengajuan', message: c.number + ' — ' + rp(c.total) + '. Transaksi yang ditolak tidak ikut dihitung.', label: 'Catatan untuk Team (opsional)', required: false, okText: 'Setujui' });
     if (note === null) return;
     App.commit(() => Core.approveClaim(S(), d.id, note, App.actor()), c.number + ' disetujui');
   };
@@ -251,9 +251,9 @@
     App.commit(() => Core.rejectClaim(S(), d.id, reason, App.actor()), 'Pengajuan ditolak', 'error');
   };
   Act['claim-send-revision'] = async d => {
-    const note = await UI.promptBox({ title: 'Kirim revisi ke Producer', message: 'Transaksi yang ditandai akan dikembalikan untuk diperbaiki.', label: 'Pesan umum (opsional)', required: false, okText: 'Kirim revisi' });
+    const note = await UI.promptBox({ title: 'Kirim revisi ke Team', message: 'Transaksi yang ditandai akan dikembalikan untuk diperbaiki.', label: 'Pesan umum (opsional)', required: false, okText: 'Kirim revisi' });
     if (note === null) return;
-    App.commit(() => Core.sendRevision(S(), d.id, note, App.actor()), 'Revisi dikirim ke Producer');
+    App.commit(() => Core.sendRevision(S(), d.id, note, App.actor()), 'Revisi dikirim ke Team');
   };
   Act['line-flag'] = async d => {
     const t = S().transactions.find(x => x.id === d.id);
@@ -323,7 +323,7 @@
         '<div class="row between"><b class="amount">' + rp(c.total) + '</b><div class="row">' + (cap.canPay ? '<button class="btn btn-primary btn-sm" data-act="claim-pay" data-id="' + c.id + '">' + (c.fund === FUND.PERSONAL ? 'Bayar' : 'Selesaikan') + '</button>' : '') + '<a class="btn ' + (cap.canReview ? 'btn-dark' : '') + ' btn-sm" href="#/claim/' + c.id + '">' + (cap.canReview ? 'Tinjau' : 'Lihat') + '</a></div></div></article>';
     };
     return H.pageHead('Approval Center', 'Periksa bukti nota, setujui, minta revisi, atau tolak. Pembayaran dicatat setelah disetujui.') +
-      (!rev ? '<div class="mb">' + H.banner('info', 'shield', 'Anda masuk sebagai <b>' + Core.ROLES[role] + '</b>, jadi halaman ini hanya untuk dilihat. Ganti peran ke <b>Finance</b> atau <b>Director</b> lewat menu akun (kanan atas) untuk menyetujui.') + '</div>' : '') +
+      (!rev ? '<div class="mb">' + H.banner('info', 'shield', 'Anda masuk sebagai <b>' + Core.ROLES[role] + '</b>, jadi halaman ini hanya untuk dilihat. Hanya <b>Finance</b> dan <b>Director</b> yang bisa menyetujui. Minta administrator mengubah peran Anda di menu Pengguna.') + '</div>' : '') +
       '<div class="grid g-kpi" style="margin-bottom:20px">' +
       '<div class="card kpi"><div class="top"><span class="chip amber">' + icon('clock') + '</span>Menunggu keputusan</div><div class="val">' + waiting.length + '</div><div class="note">' + rp(sum(waiting, c => c.total)) + '</div></div>' +
       '<div class="card kpi"><div class="top"><span class="chip green">' + icon('checkc') + '</span>Disetujui, belum dibayar</div><div class="val">' + rp(sum(appr.filter(c => c.fund === FUND.PERSONAL), c => c.total)) + '</div><div class="note">' + appr.length + ' pengajuan</div></div>' +

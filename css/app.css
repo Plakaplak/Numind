@@ -499,3 +499,70 @@ img { max-width: 100%; }
   .thumb, .thumb-pdf { display: none; }
   .row-note { background: none; border: 1px solid #ccc; }
 }
+
+/* ---------- Masuk, daftar, akun, pengguna ---------- */
+body:not([data-auth="in"]) > .sr-only,
+body:not([data-auth="in"]) .topbar,
+body:not([data-auth="in"]) .shell,
+body:not([data-auth="in"]) .bottom-nav { display: none !important; }
+
+.auth-wrap { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: minmax(340px, 5fr) 7fr; background: var(--bg); }
+.auth-side { background: var(--nav); color: var(--nav-ink); padding: 44px 52px; display: flex; flex-direction: column; justify-content: space-between; gap: 48px; }
+.auth-logo { height: 22px; width: auto; display: block; align-self: flex-start; }
+.auth-pitch h2 { font-size: 34px; line-height: 1.12; letter-spacing: -.02em; font-weight: 700; color: #fff; max-width: 9em; text-wrap: balance; }
+.auth-pitch ul { list-style: none; margin: 26px 0 0; padding: 0; display: grid; gap: 14px; max-width: 25em; }
+.auth-pitch li { display: flex; gap: 12px; align-items: flex-start; color: var(--nav-muted); font-size: 15px; }
+.auth-pitch li .ic { color: var(--accent); margin-top: 2px; }
+.auth-main { display: grid; place-items: center; padding: 32px 24px; }
+.auth-card { width: min(420px, 100%); background: #fff; border-radius: 18px; box-shadow: var(--shadow); padding: 30px; }
+.auth-card h1 { font-size: 26px; font-weight: 700; letter-spacing: -.015em; line-height: 1.2; }
+.auth-sub { color: var(--muted); margin: 6px 0 22px; }
+.auth-card form { display: grid; gap: 16px; }
+.auth-card .form-error { margin-top: 0; }
+.auth-tabs { display: flex; width: 100%; margin-bottom: 24px; }
+.auth-tabs button { flex: 1; justify-content: center; }
+.auth-note { background: var(--blue-soft); color: #13507f; border-radius: 10px; padding: 10px 14px; font-size: 14px; margin-bottom: 16px; }
+.auth-links { margin-top: 18px; text-align: center; font-size: 14px; }
+
+.pw { position: relative; }
+.pw input { padding-right: 48px; }
+.pw-btn { position: absolute; top: 2px; right: 2px; width: 40px; height: 40px; border: 0; background: none; border-radius: 8px; color: var(--muted); display: grid; place-items: center; }
+.pw-btn:hover { color: var(--ink); background: #f1f4f8; }
+.pw-hint { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+.pw-hint:empty { display: none; }
+.pw-hint.bad { color: var(--red); } .pw-hint.mid { color: var(--amber); } .pw-hint.good { color: var(--green); }
+
+.avatar.big { width: 56px; height: 56px; font-size: 19px; }
+.avatar.sm { width: 34px; height: 34px; font-size: 12.5px; flex: none; }
+.acct-head { display: flex; gap: 14px; align-items: center; margin-bottom: 20px; }
+.acct-head b { font-size: 17px; }
+.acct-form { display: grid; gap: 14px; }
+.acct-form h3 { font-size: 15px; }
+.acct-form .form-error { margin-top: 0; }
+.sep { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
+.stack-s { display: grid; gap: 8px; }
+.mt-s { margin-top: 8px; }
+.plain-steps { margin: 12px 0 16px; padding-left: 20px; display: grid; gap: 8px; }
+.forgot-last { border-top: 1px solid var(--line); padding-top: 12px; }
+.forgot-last summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.forgot-last p { margin: 10px 0 12px; font-size: 14px; color: var(--ink-2); }
+
+.pop-head { display: grid; gap: 1px; padding: 10px 10px 10px; margin-bottom: 6px; border-bottom: 1px solid var(--line); }
+.pop-head b { font-size: 15px; }
+.pop-head small { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.pop-head span { margin-top: 6px; font-size: 12.5px; font-weight: 600; color: var(--primary); }
+.side-user { display: flex; gap: 10px; align-items: center; color: var(--ink); }
+.side-user-t { display: grid; min-width: 0; }
+.side-user-t b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-user-t small { color: var(--muted); font-size: 12px; }
+.sheet-me { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
+.sheet-me > span:last-child { display: grid; }
+.sheet-me small { color: var(--muted); font-size: 13px; }
+
+@media (max-width: 860px) {
+  .auth-wrap { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .auth-side { padding: 16px 20px; flex-direction: row; align-items: center; }
+  .auth-pitch { display: none; }
+  .auth-main { align-items: start; padding: 24px 16px calc(28px + env(safe-area-inset-bottom)); }
+  .auth-card { padding: 24px 20px; }
+}

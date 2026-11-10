@@ -157,7 +157,7 @@ function submitted(count, fund) {
   const c = C.submitClaim(s, { mode: 'periode', fund: fund || FUND.PERSONAL, projectIds: [], period: '2026-11' }, producer);
   return { s, p, items, c };
 }
-test('Producer tidak boleh menyetujui; Finance/Director boleh', () => {
+test('Team tidak boleh menyetujui; Finance/Director boleh', () => {
   const { s, c } = submitted(2);
   throwsCode(() => C.approveClaim(s, c.id, '', producer), 'forbidden');
   C.approveClaim(s, c.id, 'ok', director);

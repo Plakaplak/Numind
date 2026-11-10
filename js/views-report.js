@@ -53,7 +53,7 @@
       (R.byCategory.length ? '<div class="hbars">' + R.byCategory.map(c => '<div class="hbar"><span>' + esc(c.category) + '</span><div class="bar"><i style="width:' + Math.max(3, Math.round(c.total / cmax * 100)) + '%"></i></div><span class="n">' + rpShort(c.total) + '</span></div>').join('') + '</div>' : '<p class="muted">Belum ada pengeluaran.</p>') + '</section>' +
       '<section class="card"><div class="card-head"><div class="card-title">' + icon('wallet') + 'Posisi piutang reimbursement</div></div><div class="hbars">' +
       [['Belum diajukan', rec.unclaimed, 'Siap Reimburse'], ['Menunggu approval', rec.waiting, 'Menunggu Approval'], ['Perlu revisi', rec.revision, 'Revisi'], ['Disetujui, belum dibayar', rec.approved, 'Disetujui'], ['Sudah dibayar', rec.paid, 'Dibayar'], ['Draft (nota belum lengkap)', rec.draft, 'Draft']].map(x => '<div class="row between" style="padding:2px 0">' + pill(x[2], x[0]) + '<b>' + rp(x[1]) + '</b></div>').join('') +
-      '</div><p class="small muted mt">Hanya dana pribadi Producer. Pemakaian dana perusahaan dicatat di petty cash.</p></section></div>' +
+      '</div><p class="small muted mt">Hanya dana pribadi Team. Pemakaian dana perusahaan dicatat di petty cash.</p></section></div>' +
 
       '<section class="card flush mt"><div class="card-head"><div class="card-title">' + icon('coins') + 'Buku petty cash</div><span class="small muted">Saldo sekarang <b style="color:var(--ink)">' + rp(pc.balance) + '</b> · masuk ' + rpShort(pc.in) + ' · keluar ' + rpShort(pc.out) + '</span></div>' +
       (pcRows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Keterangan</th><th>Tanggal</th><th>Project</th><th class="num">Masuk</th><th class="num">Keluar</th><th class="num">Saldo</th></tr></thead><tbody>' +
@@ -127,6 +127,7 @@
   /* ======================= Pengaturan ======================= */
   Act['settings-open'] = async () => {
     UI.closePop();
+    if (!App.isAdmin()) return UI.toast('Pengaturan hanya bisa dibuka administrator.', 'error');
     const s = S(), chk = Core.integrityCheck(s);
     let usage = '';
     try { if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); usage = (e.usage / 1048576).toFixed(1) + ' MB terpakai'; } } catch (e) { /* abaikan */ }
@@ -135,9 +136,7 @@
       title: 'Pengaturan', wide: true,
       html: '<form id="settings-form" data-form="settings-save" novalidate autocomplete="off"><div class="form-grid">' +
         '<label class="field"><span>Nama perusahaan</span><input name="company" type="text" maxlength="60" value="' + esc(s.settings.company) + '"></label>' +
-        '<label class="field"><span>Nama Anda</span><input name="userName" type="text" maxlength="40" value="' + esc(s.settings.userName) + '" placeholder="Tampil di riwayat approval"></label>' +
-        '<div class="span-2"><div class="field"><span>Peran di perangkat ini</span></div><div class="seg">' + ['producer', 'finance', 'director'].map(r => '<label><input type="radio" name="role" value="' + r + '"' + (s.settings.role === r ? ' checked' : '') + '>' + Core.ROLES[r] + '</label>').join('') + '</div>' +
-        '<p class="small muted" style="margin-top:6px">Producer mencatat dan mengajukan. Finance dan Director menyetujui dan mencatat pembayaran. Pengaturan ini hanya berlaku di perangkat ini, bukan pengaman akun.</p></div></div><div class="form-error" role="alert" hidden></div></form>' +
+        '<p class="small muted span-2" style="align-self:end">Nama dan peran tiap orang diatur di menu <a href="#/users" data-act="dlg-close">Pengguna</a>. Team mencatat dan mengajukan, Finance dan Director menyetujui dan mencatat pembayaran.</p></div><div class="form-error" role="alert" hidden></div></form>' +
         '<hr style="border:0;border-top:1px solid var(--line);margin:22px 0">' +
         '<h3 class="strong mb">Kesehatan data</h3>' + (errs.length ? H.banner('error', 'alert', '<b>' + errs.length + ' masalah integritas</b><ul>' + errs.slice(0, 6).map(i => '<li>' + esc(i.msg) + '</li>').join('') + '</ul>') : H.banner('ok', 'shield', '<b>Integritas aman.</b> Tidak ada transaksi yang masuk ke lebih dari satu pengajuan, dan semua total cocok.')) +
         (warns.length ? '<div class="mt">' + H.banner('warn', 'info', '<ul style="margin:0;padding-left:18px">' + warns.slice(0, 5).map(i => '<li>' + esc(i.msg) + '</li>').join('') + '</ul>') + '</div>' : '') +
@@ -150,14 +149,16 @@
   };
   Forms['settings-save'] = form => {
     const f = new FormData(form), st = S().settings;
-    st.company = (f.get('company') || '').trim() || 'Numind'; st.userName = (f.get('userName') || '').trim(); st.role = f.get('role') || 'producer';
+    if (!App.isAdmin()) throw new Core.CoreError('Pengaturan hanya bisa diubah administrator.', 'forbidden');
+    st.company = (f.get('company') || '').trim() || 'Numind';
     App.save(); UI.closeAllDialogs(); App.render(); UI.toast('Pengaturan disimpan', 'success');
   };
   Act['wipe-all'] = async () => {
-    if (!(await UI.confirmBox({ title: 'Hapus semua data?', html: '<p>Seluruh project, transaksi, pengajuan, dan foto nota di perangkat ini akan <b>dihapus permanen</b>.</p><p class="muted mt">Unduh cadangan dulu di Export Data bila perlu.</p>', okText: 'Lanjut', danger: true }))) return;
+    if (!App.isAdmin()) return UI.toast('Hanya administrator yang bisa menghapus data.', 'error');
+    if (!(await UI.confirmBox({ title: 'Hapus semua data?', html: '<p>Seluruh project, transaksi, pengajuan, dan foto nota di perangkat ini akan <b>dihapus permanen</b>. Akun pengguna tidak ikut terhapus.</p><p class="muted mt">Unduh cadangan dulu di Export Data bila perlu.</p>', okText: 'Lanjut', danger: true }))) return;
     const t = await UI.promptBox({ title: 'Ketik HAPUS untuk menghapus', label: 'Konfirmasi', multiline: false, danger: true, okText: 'Hapus semua', min: 5, error: 'Ketik HAPUS untuk melanjutkan.' });
     if (!t || t.trim().toUpperCase() !== 'HAPUS') { if (t) UI.toast('Konfirmasi tidak sesuai. Data tidak dihapus.', 'error'); return; }
-    await DB.clearAll(); UI.closeAllDialogs();
+    await DB.clearData(); UI.closeAllDialogs();
     App.replaceState(Core.emptyState()); UI.toast('Semua data dihapus');
   };
 })();

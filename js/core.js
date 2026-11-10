@@ -25,8 +25,8 @@
     PAID: 'Dibayar', REJECTED: 'Ditolak', CANCELLED: 'Dibatalkan'
   });
   const FUND = Object.freeze({ PERSONAL: 'pribadi', COMPANY: 'perusahaan' });
-  const FUND_LABEL = { pribadi: 'Dana pribadi Producer', perusahaan: 'Dana operasional perusahaan' };
-  const ROLES = { producer: 'Producer', finance: 'Finance', director: 'Director' };
+  const FUND_LABEL = { pribadi: 'Dana pribadi Team', perusahaan: 'Dana operasional perusahaan' };
+  const ROLES = { producer: 'Team', finance: 'Finance', director: 'Director' };
   const PERMS = { approve: ['finance', 'director'], pay: ['finance', 'director'] };
 
   const CATEGORIES_EXPENSE = [
@@ -92,7 +92,7 @@
   }
   function assertCan(actor, perm) {
     if (!actor || !PERMS[perm].includes(actor.role)) {
-      throw err('Peran ' + (ROLES[actor && actor.role] || 'ini') + ' tidak punya izin untuk aksi ini. Ganti peran ke Finance atau Director.', 'forbidden');
+      throw err('Peran ' + (ROLES[actor && actor.role] || 'ini') + ' tidak punya izin untuk aksi ini. Hanya Finance atau Director yang bisa melakukannya.', 'forbidden');
     }
   }
   function logTo(entity, action, actor, note) {
@@ -426,7 +426,7 @@
     assertCan(actor, 'approve');
     const c = needClaim(state, claimId, [CL.WAITING]);
     if (!c.txIds.includes(txId)) throw err('Transaksi bukan bagian dari pengajuan ini.');
-    note = needNote(note, 'catatan revisi untuk Producer');
+    note = needNote(note, 'catatan revisi untuk Team');
     const t = getTx(state, txId);
     if (t.status !== TX.WAITING) throw err('Hanya transaksi berstatus Menunggu Approval yang bisa diminta revisi.', 'state');
     t.status = TX.REVISION; t.revNote = note; t.flaggedAt = nowISO(); t.fixedAt = null; t.revReply = '';

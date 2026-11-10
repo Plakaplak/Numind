@@ -135,7 +135,7 @@
       '<label class="field"><span>Toko / vendor <em>opsional</em></span><input name="vendor" type="text" maxlength="80" value="' + esc(v.vendor) + '"></label>' +
       '<label class="field"><span>No. nota <em>opsional</em></span><input name="notaNo" type="text" maxlength="40" value="' + esc(v.notaNo) + '"></label>' +
       '<fieldset class="span-2 opts-set" style="border:0;padding:0;margin:0"><legend class="field" style="margin-bottom:6px"><span>Sumber dana</span></legend><div class="opts">' +
-      '<label class="opt"><input type="radio" name="fund" value="pribadi"' + (v.fund === FUND.PERSONAL ? ' checked' : '') + (locked ? ' disabled' : '') + '><span><b>Dana pribadi Producer</b><small>Saya talangi dulu. Menjadi piutang reimbursement ke perusahaan.</small></span></label>' +
+      '<label class="opt"><input type="radio" name="fund" value="pribadi"' + (v.fund === FUND.PERSONAL ? ' checked' : '') + (locked ? ' disabled' : '') + '><span><b>Dana pribadi Team</b><small>Saya talangi dulu. Menjadi piutang reimbursement ke perusahaan.</small></span></label>' +
       '<label class="opt"><input type="radio" name="fund" value="perusahaan"' + (v.fund === FUND.COMPANY ? ' checked' : '') + (locked ? ' disabled' : '') + '><span><b>Dana operasional perusahaan</b><small>Pakai kas kantor. Tercatat sebagai pemakaian petty cash, bukan tagihan.</small></span></label></div></fieldset>' +
       H.photoBlock(photoId, { hash: o.hash || t.photoHash, noReceipt: t.noReceipt, reason: t.noReceiptReason, lock: o.lockPhoto }) +
       (rev ? '<label class="field span-2"><span>Catatan perbaikan untuk Finance</span><textarea name="revReply" rows="2" placeholder="Jelaskan apa yang sudah diperbaiki" required>' + esc(t.revReply || '') + '</textarea></label>' : '') +
@@ -207,7 +207,10 @@
     }
   };
   H.fail = (form, e) => {
-    if (e instanceof Core.CoreError) { if (form) H.formError(form, e.message); else UI.toast(e.message, 'error'); }
+    if (e instanceof Core.CoreError || (e && e.name === 'AuthError')) {
+      if (form) { H.formError(form, e.message); const el = e.field && form.elements[e.field]; if (el && el.focus) el.focus(); }
+      else UI.toast(e.message, 'error');
+    }
     else { console.error(e); UI.toast('Terjadi kesalahan: ' + (e && e.message || e), 'error'); }
   };
   H.rememberLast = d => {
@@ -276,7 +279,7 @@
     const inc = t.type === 'income', claim = t.claimId && H.claimOf(t.claimId);
     const notes = [];
     if (t.status === TX.REVISION && t.revNote) notes.push(H.banner('warn', 'undo', '<b>Finance meminta revisi</b><br>' + esc(t.revNote)));
-    if (t.revReply && t.status !== TX.REVISION) notes.push(H.banner('info', 'info', '<b>Catatan perbaikan Producer</b><br>' + esc(t.revReply)));
+    if (t.revReply && t.status !== TX.REVISION) notes.push(H.banner('info', 'info', '<b>Catatan perbaikan Team</b><br>' + esc(t.revReply)));
     if (t.status === TX.REJECTED && t.rejectReason) notes.push(H.banner('error', 'x', '<b>Ditolak</b><br>' + esc(t.rejectReason)));
     if (t.noReceipt) notes.push(H.banner('warn', 'alert', '<b>Tanpa nota</b><br>' + esc(t.noReceiptReason)));
     if (t.dupConfirmed) notes.push(H.banner('warn', 'alert', 'Transaksi ini mirip dengan data lain dan sudah dikonfirmasi saat dicatat.'));

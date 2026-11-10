@@ -6,7 +6,7 @@
   'use strict';
   const { esc, rp, icon } = UI;
   const { TX, CL } = Core;
-  const App = window.App = { state: null, ui: {}, query: {}, route: { name: 'dashboard', params: [] }, installEvent: null };
+  const App = window.App = { state: null, user: null, ui: {}, query: {}, route: { name: 'dashboard', params: [] }, installEvent: null };
 
   const NAV = [
     { id: 'dashboard', label: 'Dashboard', ic: 'home', group: '' },
@@ -17,14 +17,39 @@
     { id: 'reimburse', label: 'Reimbursement', ic: 'wallet', group: 'Pengajuan' },
     { id: 'approval', label: 'Approval Center', ic: 'checkc', group: 'Pengajuan' },
     { id: 'report', label: 'Financial Report', ic: 'chart', group: 'Laporan' },
-    { id: 'export', label: 'Export Data', ic: 'download', group: 'Laporan' }
+    { id: 'export', label: 'Export Data', ic: 'download', group: 'Laporan' },
+    { id: 'users', label: 'Pengguna', ic: 'users', group: 'Pengaturan', admin: true }
   ];
+  const navFor = () => NAV.filter(n => !n.admin || App.isAdmin());
   const ACTIVE_OF = { project: 'projects', claim: 'reimburse' };
   const TITLE_OF = { project: 'Detail Project', claim: 'Detail Pengajuan' };
 
-  /* ---------- Peran & penyimpanan ---------- */
-  App.role = () => (App.state && App.state.settings.role) || 'producer';
-  App.actor = () => ({ name: ((App.state.settings.userName || '').trim()) || Core.ROLES[App.role()], role: App.role() });
+  /* ---------- Pengguna yang login & penyimpanan ---------- */
+  App.role = () => (App.user && App.user.role) || 'producer';
+  App.isAdmin = () => !!(App.user && App.user.admin);
+  App.actor = () => ({ name: (App.user && App.user.name) || Core.ROLES[App.role()], role: App.role() });
+
+  /** Dipanggil AuthUI setelah login berhasil: tampilkan aplikasi untuk pengguna ini. */
+  App.enter = user => {
+    App.user = user;
+    document.body.dataset.auth = 'in';
+    const qs = new URLSearchParams(location.search);
+    if (qs.get('demo') === '1' && user.admin && !App.state.projects.length) { Core.seedDemo(App.state); App.save(); }
+    DB.gcPhotos(App.state);
+    netUpdate();
+    onRoute();
+  };
+  /** Dipanggil AuthUI saat belum/tidak lagi login: kosongkan tampilan agar data tidak tersisa di layar. */
+  App.leave = () => {
+    const wasIn = !!App.user;
+    if (wasIn && App.state) { clearTimeout(saveTimer); flush(); }
+    App.user = null; App.ui = {}; App.query = {};
+    UI.closeAllDialogs(); UI.closePop();
+    for (const id of ['view', 'sidebar', 'bottomNav']) { const el = document.getElementById(id); if (el) el.innerHTML = ''; }
+    // Setelah keluar, orang berikutnya mulai dari Dashboard. Tautan yang dibuka sebelum masuk (belum pernah login) tetap dipertahankan.
+    if (wasIn) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* abaikan */ } }
+    document.body.dataset.auth = 'out';
+  };
 
   let saveTimer = null;
   async function flush() {
@@ -62,10 +87,11 @@
     window.scrollTo(0, 0);
     const v = document.getElementById('view'); if (v) v.focus({ preventScroll: true });
   }
-  window.addEventListener('hashchange', onRoute);
+  window.addEventListener('hashchange', () => { if (App.user) onRoute(); });
 
   /* ---------- Render ---------- */
   App.render = () => {
+    if (!App.user) return;
     const r = App.route, view = document.getElementById('view');
     const fn = V[r.name];
     let html;
@@ -84,18 +110,21 @@
     return { approval: rev ? waiting + appr : 0, reimburse: revi, receipts: s.receipts.length + drafts, waiting, appr, revi, drafts };
   }
   function renderChrome() {
+    if (!App.user) return;
     const s = App.state, r = App.route, active = ACTIVE_OF[r.name] || r.name, c = counts();
     const badge = id => (c[id] ? '<span class="nav-count">' + c[id] + '</span>' : '');
     let side = '', lastGroup = null;
-    for (const n of NAV) {
+    for (const n of navFor()) {
       if (n.group !== lastGroup && n.group) side += '<div class="nav-group">' + n.group + '</div>';
       lastGroup = n.group;
       side += '<a class="nav-item' + (active === n.id ? ' active' : '') + '" href="#/' + n.id + '"' + (active === n.id ? ' aria-current="page"' : '') + '>' + icon(n.ic) + '<span>' + n.label + '</span>' + badge(n.id) + '</a>';
     }
     const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone;
     const canInstall = !!App.installEvent || ios;
+    const u = App.user;
     side += '<div class="side-foot">' + (canInstall ? '<button class="btn btn-sm btn-block" data-act="install-app">' + icon('download') + 'Pasang aplikasi</button>' : '') +
-      '<span>Peran: <b style="color:var(--ink)">' + Core.ROLES[App.role()] + '</b> · <button class="link-btn" data-act="settings-open" style="font-size:12.5px">Ubah</button></span><span>Data tersimpan di perangkat ini dan bisa dipakai offline.</span></div>';
+      '<div class="side-user"><span class="avatar sm">' + esc(UI.initials(u.name)) + '</span><span class="side-user-t"><b>' + esc(u.name) + '</b><small>' + Core.ROLES[u.role] + (u.admin ? ' · Administrator' : '') + '</small></span></div>' +
+      '<span><button class="link-btn" data-act="account-open" style="font-size:12.5px">Akun saya</button>' + (u.admin ? ' · <button class="link-btn" data-act="settings-open" style="font-size:12.5px">Pengaturan</button>' : '') + ' · <button class="link-btn" data-act="logout" style="font-size:12.5px">Keluar</button></span><span>Data tersimpan di perangkat ini dan bisa dipakai offline.</span></div>';
     document.getElementById('sidebar').innerHTML = side;
 
     const bn = (id, ic, label, href) => '<a class="bn' + (active === id ? ' active' : '') + '" href="' + href + '">' + icon(ic) + '<span>' + label + '</span>' + badge(id) + '</a>';
@@ -107,15 +136,16 @@
     const name = TITLE_OF[r.name] || (nav ? nav.label : 'KasProyek');
     document.getElementById('pageName').textContent = name;
     document.title = name + ' — KasProyek';
-    const nm = (s.settings.userName || Core.ROLES[App.role()] || 'K');
-    document.getElementById('avatar').textContent = UI.initials(nm);
-    document.getElementById('avatar').title = Core.ROLES[App.role()];
+    document.getElementById('avatar').textContent = UI.initials(u.name);
+    document.getElementById('avatar').title = u.name + ' · ' + Core.ROLES[u.role];
     const rev = App.role() !== 'producer';
     document.getElementById('bellDot').hidden = !((rev && (c.waiting || c.appr)) || c.revi || c.drafts);
   }
 
   /* ---------- Event delegation ---------- */
   document.addEventListener('click', e => {
+    const skip = e.target.closest('a.sr-only[href="#view"]');       // tautan "Lewati ke konten" tidak boleh mengubah rute
+    if (skip) { e.preventDefault(); const v = document.getElementById('view'); if (v) v.focus(); return; }
     const el = e.target.closest('[data-act]'); if (!el) return;
     const a = e.target.closest('a[href]');
     if (a && a !== el && el.contains(a) && !a.hasAttribute('data-act')) return;
@@ -159,21 +189,21 @@
   Act['wizard-from-sheet'] = (d, el) => { const dlg = UI.dialogOf(el); if (dlg) dlg.close(); setTimeout(() => Act['wizard-open']({}), 30); };
 
   Act['user-open'] = (d, el) => {
-    const roles = [['producer', 'Producer', 'Mencatat dan mengajukan'], ['finance', 'Finance', 'Memeriksa, menyetujui, membayar'], ['director', 'Director', 'Menyetujui pengajuan']];
+    const u = App.user; if (!u) return;
     const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.navigator.standalone;
-    UI.openPop(el, '<div class="pop-title">Masuk sebagai ' + esc(App.state.settings.userName || '') + '</div>' +
-      roles.map(r => '<button class="pop-item' + (App.role() === r[0] ? ' on' : '') + '" data-act="set-role" data-role="' + r[0] + '">' + icon(App.role() === r[0] ? 'check' : 'user') + '<span>' + r[1] + '<small>' + r[2] + '</small></span></button>').join('') +
-      '<hr><button class="pop-item" data-act="settings-open">' + icon('sliders') + 'Pengaturan</button>' +
-      (App.installEvent || ios ? '<button class="pop-item" data-act="install-app">' + icon('download') + 'Pasang aplikasi</button>' : ''));
+    UI.openPop(el, '<div class="pop-head"><b>' + esc(u.name) + '</b><small>' + esc(u.email) + '</small><span>' + Core.ROLES[u.role] + (u.admin ? ' · Administrator' : '') + '</span></div>' +
+      '<button class="pop-item" data-act="account-open">' + icon('user') + 'Akun saya</button>' +
+      (u.admin ? '<a class="pop-item" href="#/users">' + icon('users') + 'Pengguna</a><button class="pop-item" data-act="settings-open">' + icon('sliders') + 'Pengaturan</button>' : '') +
+      (App.installEvent || ios ? '<button class="pop-item" data-act="install-app">' + icon('download') + 'Pasang aplikasi</button>' : '') +
+      '<hr><button class="pop-item" data-act="logout">' + icon('logout') + 'Keluar</button>');
   };
-  Act['set-role'] = d => { App.state.settings.role = d.role; App.save(); App.render(); UI.toast('Peran sekarang: ' + Core.ROLES[d.role]); };
 
   function notifItems() {
     const s = App.state, role = App.role(), rev = role !== 'producer', out = [];
     for (const c of s.claims) {
       if (rev && c.status === CL.WAITING) out.push({ ic: 'clock', t: c.number + ' menunggu approval', sub: rp(c.total) + ' · ' + (c.createdBy || ''), href: '#/claim/' + c.id });
       if (rev && c.status === CL.APPROVED) out.push({ ic: 'coins', t: c.number + ' siap dibayar', sub: rp(c.total), href: '#/claim/' + c.id });
-      if (c.status === CL.REVISION) out.push({ ic: 'undo', t: c.number + ' perlu revisi', sub: rev ? 'Menunggu perbaikan Producer' : 'Perbaiki lalu ajukan ulang', href: '#/claim/' + c.id });
+      if (c.status === CL.REVISION) out.push({ ic: 'undo', t: c.number + ' perlu revisi', sub: rev ? 'Menunggu perbaikan Team' : 'Perbaiki lalu ajukan ulang', href: '#/claim/' + c.id });
     }
     const drafts = s.transactions.filter(t => t.type === 'expense' && t.status === TX.DRAFT);
     if (drafts.length) out.push({ ic: 'camera', t: drafts.length + ' transaksi Draft tanpa nota', sub: 'Lengkapi agar bisa diajukan', href: '#/receipts' });
@@ -185,18 +215,16 @@
     UI.openPop(el, '<div class="pop-title">Perlu perhatian</div>' + (items.length ? items.map(i => '<a class="pop-item" href="' + i.href + '">' + icon(i.ic) + '<span>' + esc(i.t) + '<small>' + esc(i.sub) + '</small></span></a>').join('') : '<div style="padding:18px 12px;color:var(--muted);font-size:14px">Tidak ada yang perlu ditindaklanjuti.</div>'), 'wide');
   };
   Act['more-open'] = () => {
-    const c = counts();
+    const c = counts(), u = App.user;
     UI.makeDialog({
-      title: 'Menu', html: '<div class="sheet-grid">' + NAV.map(n => '<a class="sheet-tile" href="#/' + n.id + '" data-act="dlg-close">' + icon(n.ic) + n.label + (c[n.id] ? '<span class="nav-count">' + c[n.id] + '</span>' : '') + '</a>').join('') +
-        '<button class="sheet-tile" data-act="more-settings">' + icon('sliders') + 'Pengaturan</button><button class="sheet-tile" data-act="more-role">' + icon('user') + 'Peran: ' + Core.ROLES[App.role()] + '</button></div>'
+      title: 'Menu', html: '<div class="sheet-me"><span class="avatar">' + esc(UI.initials(u.name)) + '</span><span><b>' + esc(u.name) + '</b><small>' + Core.ROLES[u.role] + (u.admin ? ' · Administrator' : '') + '</small></span></div>' +
+        '<div class="sheet-grid">' + navFor().map(n => '<a class="sheet-tile" href="#/' + n.id + '" data-act="dlg-close">' + icon(n.ic) + n.label + (c[n.id] ? '<span class="nav-count">' + c[n.id] + '</span>' : '') + '</a>').join('') +
+        (u.admin ? '<button class="sheet-tile" data-act="more-settings">' + icon('sliders') + 'Pengaturan</button>' : '') +
+        '<button class="sheet-tile" data-act="more-account">' + icon('user') + 'Akun saya</button><button class="sheet-tile" data-act="logout">' + icon('logout') + 'Keluar</button></div>'
     });
   };
   Act['more-settings'] = (d, el) => { const dlg = UI.dialogOf(el); if (dlg) dlg.close(); setTimeout(Act['settings-open'], 30); };
-  Act['more-role'] = (d, el) => {
-    const dlg = UI.dialogOf(el); if (dlg) dlg.close();
-    setTimeout(() => UI.makeDialog({ title: 'Peran di perangkat ini', cls: 'dlg-small', html: '<div class="stack" style="gap:6px">' + [['producer', 'Producer', 'Mencatat dan mengajukan'], ['finance', 'Finance', 'Memeriksa, menyetujui, membayar'], ['director', 'Director', 'Menyetujui pengajuan']].map(r => '<button class="pop-item' + (App.role() === r[0] ? ' on' : '') + '" data-act="set-role-close" data-role="' + r[0] + '">' + icon(App.role() === r[0] ? 'check' : 'user') + '<span>' + r[1] + '<small>' + r[2] + '</small></span></button>').join('') + '</div>' }), 30);
-  };
-  Act['set-role-close'] = (d, el) => { const dlg = UI.dialogOf(el); if (dlg) dlg.close(); Act['set-role'](d); };
+  Act['more-account'] = (d, el) => { const dlg = UI.dialogOf(el); if (dlg) dlg.close(); setTimeout(Act['account-open'], 30); };
 
   /* ---------- Pencarian ---------- */
   Act['search-open'] = () => {
@@ -244,17 +272,15 @@
     } else App.state = Core.emptyState();
     if (!App.state.settings.last) App.state.settings.last = {};
     if (App.state.settings.company === 'Studio Kreatif') App.state.settings.company = 'Numind'; // nama bawaan versi awal
-    const qs = new URLSearchParams(location.search);
-    if (qs.get('demo') === '1' && !App.state.projects.length) { Core.seedDemo(App.state); App.save(); }
-    if (['producer', 'finance', 'director'].includes(qs.get('role'))) App.state.settings.role = qs.get('role');
     DB.onRemoteChange(async () => { const s2 = await DB.loadState(); if (s2) { try { App.state = Core.validateState(s2); App.render(); } catch (e) { /* abaikan */ } } });
-    netUpdate(); onRoute();
-    DB.gcPhotos(App.state);
+    netUpdate();
+    await AuthUI.load();
+    AuthUI.gate();          // tanpa sesi yang sah: layar masuk/daftar. Dengan sesi: App.enter() menampilkan aplikasi.
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
       navigator.serviceWorker.register('sw.js').then(reg => {
         reg.addEventListener('updatefound', () => { const nw = reg.installing; if (nw) nw.addEventListener('statechange', () => { if (nw.state === 'installed' && navigator.serviceWorker.controller) UI.toast('Versi baru KasProyek tersedia.', '', { act: 'reload-app', label: 'Muat ulang' }); }); });
       }).catch(e => console.warn('Service worker gagal didaftarkan:', e));
     }
   }
-  init().catch(e => { console.error(e); document.getElementById('view').innerHTML = '<div class="card"><div class="empty"><h3>KasProyek gagal dimulai</h3><p>' + esc(e && e.message || e) + '</p></div></div>'; });
+  init().catch(e => { console.error(e); document.body.dataset.auth = 'in'; document.getElementById('view').innerHTML = '<div class="card"><div class="empty"><h3>KasProyek gagal dimulai</h3><p>' + esc(e && e.message || e) + '</p></div></div>'; });
 })();
