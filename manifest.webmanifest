@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "KasProyek — Pencatatan & Reimbursement",
+  "short_name": "KasProyek",
+  "description": "Catat pemasukan dan pengeluaran project, upload nota, ajukan reimbursement, dan setujui.",
+  "lang": "id",
+  "dir": "ltr",
+  "start_url": "./#/dashboard",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#004737",
+  "theme_color": "#1a1f2b",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Catat pengeluaran", "short_name": "Pengeluaran", "url": "./#/expense", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Upload bon / nota", "short_name": "Upload nota", "url": "./#/receipts", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Approval Center", "short_name": "Approval", "url": "./#/approval", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
