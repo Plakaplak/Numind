@@ -41,7 +41,7 @@
 
   /* ---------- Onboarding ---------- */
   function onboarding() {
-    return '<img class="welcome-logo" src="img/numind-green.png" alt="Numind">' + H.pageHead('Selamat datang di KasProyek', 'Catat uang masuk dan keluar tiap project, simpan nota, lalu ajukan reimbursement tanpa risiko tertagih dua kali.') +
+    return '<img class="welcome-logo" src="img/numind-green.png" alt="Numind">' + H.pageHead('Selamat datang Numind Team', 'Catat uang masuk dan keluar tiap project, simpan nota, lalu ajukan reimbursement tanpa risiko tertagih dua kali.') +
       '<div class="card"><div class="empty" style="padding:28px 8px"><div class="ic-wrap">' + icon('brief') + '</div><h3>Mulai dari project pertama</h3><p>Tiga langkah dasar:</p>' +
       '<ol class="steps"><li><span><b>Buat project dan tentukan budget</b>Satu project untuk satu pekerjaan klien.</span></li>' +
       '<li><span><b>Catat pengeluaran harian</b>Nominal, kategori, sumber dana, dan foto nota. Boleh dicicil tiap hari.</span></li>' +

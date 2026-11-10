@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Kode administrator — KasProyek</title>
+<style>
+  :root { --ink: #16231d; --muted: #5d6b64; --line: #d9e0dc; --green: #0f4a37; --bg: #f5f7f6; --card: #fff; --bad: #a5321f; }
+  @media (prefers-color-scheme: dark) { :root { --ink: #e8efeb; --muted: #9baba3; --line: #2b3a33; --green: #5ec9a0; --bg: #0f1613; --card: #17201c; --bad: #ff8d78; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  p { margin: 0 0 14px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin: 18px 0; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  label { display: block; font-weight: 600; margin-bottom: 6px; }
+  input[type=text] { width: 100%; font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  button { font: inherit; font-weight: 600; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+  button.primary { background: var(--green); border-color: var(--green); color: #fff; }
+  @media (prefers-color-scheme: dark) { button.primary { color: #08140f; } }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+  button[disabled] { opacity: .6; cursor: wait; }
+  .code { font: 700 26px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .04em; word-break: break-all; }
+  pre { margin: 0; padding: 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+  .bad { color: var(--bad); font-weight: 600; }
+  ol { padding-left: 20px; margin: 0; } li { margin-bottom: 6px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Kode administrator</h1>
+  <p class="muted">Alat untuk pengelola aplikasi. Kode ini menentukan siapa yang boleh membuat akun administrator pertama di sebuah perangkat. Halaman ini berjalan di browser Anda dan tidak mengirim apa pun ke mana pun.</p>
+
+  <div class="card">
+    <h2>1. Tentukan kode</h2>
+    <label for="own">Kode sendiri <span class="muted">(opsional, minimal 8 huruf atau angka)</span></label>
+    <input id="own" type="text" autocomplete="off" spellcheck="false" placeholder="Kosongkan untuk membuat kode acak">
+    <div class="row"><button id="go" class="primary" type="button">Buat konfigurasi</button></div>
+    <p id="err" class="bad" role="alert" hidden style="margin-top:12px"></p>
+  </div>
+
+  <div id="out" hidden>
+    <div class="card">
+      <h2>2. Simpan kodenya</h2>
+      <p class="code" id="code" aria-live="polite"></p>
+      <p class="muted">Catat di tempat aman (pengelola kata sandi, misalnya). Kode ini <b>tidak tersimpan di aplikasi</b> dan tidak bisa dilihat lagi dari hash-nya. Berikan hanya kepada orang yang akan menjadi administrator.</p>
+      <div class="row"><button id="copy-code" type="button">Salin kode</button></div>
+    </div>
+    <div class="card">
+      <h2>3. Pasang di aplikasi</h2>
+      <p>Di berkas <b>js/config.js</b>, ganti baris <code>adminSetup</code> dengan baris di bawah, lalu unggah ulang aplikasi.</p>
+      <pre id="line"></pre>
+      <div class="row"><button id="copy-line" type="button">Salin baris</button></div>
+      <p class="muted" style="margin-top:14px">Perangkat yang sudah punya akun tidak terpengaruh. Kode baru hanya berlaku untuk akun pertama di perangkat yang masih kosong.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Catatan keamanan</h2>
+    <ol class="muted">
+      <li>Yang ikut terkirim ke browser hanya hash kode, bukan kodenya. Hash itu memakai PBKDF2 sehingga sulit ditebak, terutama untuk kode acak.</li>
+      <li>Ini pagar kebijakan, bukan brankas: karena aplikasi berjalan di perangkat, orang yang paham alat pengembang bisa mengubah <code>config.js</code> di salinannya sendiri. Keamanan penuh butuh server.</li>
+      <li>Kode yang bocor: buat kode baru di sini dan pasang ulang. Akun yang sudah ada tetap aman.</li>
+    </ol>
+  </div>
+</main>
+<script src="../js/auth.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var go = $('go');
+  function fail(msg) { var e = $('err'); e.textContent = msg; e.hidden = !msg; }
+  function copy(text, btn) {
+    var done = function () { var t = btn.textContent; btn.textContent = 'Tersalin'; setTimeout(function () { btn.textContent = t; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { fail('Tidak bisa menyalin otomatis. Pilih teksnya lalu salin manual.'); });
+    else fail('Tidak bisa menyalin otomatis. Pilih teksnya lalu salin manual.');
+  }
+  go.addEventListener('click', async function () {
+    fail(''); go.disabled = true; var label = go.textContent; go.textContent = 'Menghitung…';
+    try {
+      var own = $('own').value.trim();
+      var code = own || Auth.generateSetupCode();
+      var gate = await Auth.makeSetupGate(code);
+      $('code').textContent = own ? Auth.normCode(own).replace(/(.{4})(?=.)/g, '$1-') : code;
+      $('line').textContent = 'adminSetup: ' + JSON.stringify(gate) + ',';
+      $('out').hidden = false;
+      $('out').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (e) {
+      fail(e && e.message || String(e));
+    } finally { go.disabled = false; go.textContent = label; }
+  });
+  $('copy-code').addEventListener('click', function (e) { copy($('code').textContent, e.target); });
+  $('copy-line').addEventListener('click', function (e) { copy($('line').textContent, e.target); });
+})();
+</script>
+</body>
+</html>

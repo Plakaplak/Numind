@@ -210,6 +210,143 @@ test('Unicode pada kata sandi dinormalkan (NFKC) dan tetap bisa dipakai', async 
   assert.ok(await lg(a, 'rina@numind.id', 'kata-sandi-é-2026'));
 });
 
+/* ---------- Kode administrator ---------- */
+const CODE = 'K7MQ-3XTD-9PWR';
+let GATE;
+const gate = async () => GATE || (GATE = await Auth.makeSetupGate(CODE, IT));
+
+test('kode administrator: bentuk kode acak dan normalisasi', async () => {
+  const c = Auth.generateSetupCode();
+  assert.match(c, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
+  assert.notStrictEqual(c, Auth.generateSetupCode());
+  assert.strictEqual(Auth.normCode(' k7mq 3xtd_9pwr '), 'K7MQ3XTD9PWR');
+});
+test('kode administrator: hash tidak memuat kode; huruf kecil dan spasi tetap diterima', async () => {
+  const g = await gate();
+  assert.ok(!JSON.stringify(g).toUpperCase().includes('K7MQ'));
+  assert.ok(await Auth.checkSetupCode(g, 'k7mq 3xtd 9pwr'));
+  assert.ok(!(await Auth.checkSetupCode(g, 'K7MQ-3XTD-9PWS')));
+  assert.ok(!(await Auth.checkSetupCode(g, '')));
+});
+test('kode administrator: kode terlalu pendek ditolak saat membuat hash', async () => {
+  await rejects(Auth.makeSetupGate('abc', IT), 'setup_code', /minimal 8/);
+});
+test('akun pertama dengan syarat kode: tanpa kode ditolak, tidak ada akun terbuat', async () => {
+  const a = Auth.emptyAuth(), g = await gate();
+  const e = await rejects(reg(a, {}, { setup: g }), 'setup_code', /Isi kode/);
+  assert.strictEqual(e.field, 'setupCode'); assert.strictEqual(a.users.length, 0);
+});
+test('akun pertama dengan kode salah ditolak; kode benar → administrator', async () => {
+  const a = Auth.emptyAuth(), g = await gate();
+  const e = await rejects(reg(a, { setupCode: 'AAAA-BBBB-CCCC' }, { setup: g }), 'setup_code', /salah/);
+  assert.strictEqual(e.field, 'setupCode'); assert.strictEqual(a.users.length, 0);
+  const u = await reg(a, { setupCode: 'k7mq-3xtd-9pwr' }, { setup: g });
+  assert.strictEqual(u.admin, true); assert.strictEqual(a.users.length, 1);
+  assert.ok(!(Auth.normCode('x') in a.attempts) && !a.attempts['#setup'], 'hitungan percobaan dibersihkan setelah berhasil');
+});
+test('kode salah berulang → dikunci sementara, bahkan kode benar ditolak selama terkunci', async () => {
+  const a = Auth.emptyAuth(), g = await gate(), t0 = 1000000;
+  for (let i = 0; i < 4; i++) await rejects(reg(a, { setupCode: 'SALAH-SALAH' }, { setup: g, now: t0 }), 'setup_code');
+  const e = await rejects(reg(a, { setupCode: 'SALAH-SALAH' }, { setup: g, now: t0 }), 'locked', /Terlalu banyak/);
+  assert.ok(e.retryAfter >= 29);
+  await rejects(reg(a, { setupCode: CODE }, { setup: g, now: t0 + 5000 }), 'locked');
+  const u = await reg(a, { setupCode: CODE }, { setup: g, now: t0 + 31000 });
+  assert.strictEqual(u.admin, true);
+});
+test('kode salah tidak dihitung bila isian lain belum benar (salah ketik tidak membakar percobaan)', async () => {
+  const a = Auth.emptyAuth(), g = await gate();
+  await rejects(reg(a, { email: 'bukan-email', setupCode: 'SALAH-SALAH' }, { setup: g }), 'email');
+  await rejects(reg(a, { password: '123', setupCode: 'SALAH-SALAH' }, { setup: g }), 'password');
+  assert.ok(!a.attempts['#setup']);
+});
+test('syarat kode hanya untuk akun pertama; pendaftar berikutnya dan akun buatan admin tidak diminta', async () => {
+  const a = Auth.emptyAuth(), g = await gate();
+  const admin = await reg(a, { setupCode: CODE }, { setup: g });
+  const u2 = await reg(a, { email: 'budi@numind.id', name: 'Budi' }, { setup: g });
+  assert.strictEqual(u2.admin, false); assert.strictEqual(u2.role, 'producer');
+  const u3 = await reg(a, { email: 'sari@numind.id', name: 'Sari', admin: true }, { setup: g, by: admin.id });
+  assert.strictEqual(u3.admin, true);
+});
+test('tanpa konfigurasi kode (setup null), akun pertama tetap bisa dibuat', async () => {
+  const a = Auth.emptyAuth();
+  assert.strictEqual((await reg(a, {}, { setup: null })).admin, true);
+});
+test('gerbang kode rusak atau tidak termuat → gagal tertutup (tidak ada akun terbuat)', async () => {
+  const a = Auth.emptyAuth();
+  await rejects(reg(a, {}, { setup: { salt: 'x' } }), 'setup_config', /rusak atau tidak termuat/);
+  await rejects(reg(a, {}, { setup: false }), 'setup_config');
+  assert.strictEqual(a.users.length, 0);
+});
+
+/* ---------- Masuk di perangkat kosong ---------- */
+test('masuk di perangkat tanpa akun → pesan jelas, tidak menghitung percobaan', async () => {
+  const a = Auth.emptyAuth();
+  const e = await rejects(lg(a, 'rina@numind.id', 'kopi-susu-77'), 'no_accounts', /Belum ada akun di perangkat ini/);
+  assert.deepStrictEqual(a.attempts, {});
+});
+
+/* ---------- Pindah akun antar perangkat ---------- */
+async function seeded() {
+  const a = Auth.emptyAuth(), admin = await reg(a, {});
+  await reg(a, { email: 'budi@numind.id', name: 'Budi Santoso', password: 'rahasia-budi-1' });
+  const off = await reg(a, { email: 'off@numind.id', name: 'Off User', password: 'rahasia-off-22' }, { by: admin.id });
+  Auth.setDisabled(a, admin.id, off.id, true);
+  a.allowSignup = false; a.attempts['x@y.id'] = { n: 3, until: 0 };
+  return a;
+}
+test('ekspor lalu impor: semua akun masuk dengan kata sandi yang sama di perangkat baru', async () => {
+  const a = await seeded();
+  const file = JSON.parse(JSON.stringify(Auth.exportAccounts(a, { now: 5 })));
+  assert.strictEqual(file.app, 'kasproyek-akun'); assert.strictEqual(file.exportedAt, 5);
+  assert.ok(!('attempts' in file), 'hitungan percobaan tidak ikut');
+  const b = Auth.emptyAuth();
+  assert.strictEqual(Auth.importAccounts(b, file), 3);
+  assert.strictEqual(b.allowSignup, false); assert.deepStrictEqual(b.attempts, {});
+  const u = await lg(b, 'rina@numind.id', 'kopi-susu-77'); assert.strictEqual(u.admin, true);
+  assert.ok(await lg(b, 'budi@numind.id', 'rahasia-budi-1'));
+  await rejects(lg(b, 'off@numind.id', 'rahasia-off-22'), 'disabled');
+  await rejects(lg(b, 'rina@numind.id', 'salah-salah'), 'bad_credentials');
+});
+test('ekspor tidak memuat kata sandi asli', async () => {
+  const a = await seeded(); const txt = JSON.stringify(Auth.exportAccounts(a));
+  for (const p of ['kopi-susu-77', 'rahasia-budi-1', 'rahasia-off-22']) assert.ok(!txt.includes(p));
+});
+test('impor ditolak bila perangkat sudah punya akun', async () => {
+  const a = await seeded(), file = Auth.exportAccounts(a);
+  await rejects(Promise.resolve().then(() => Auth.importAccounts(a, file)), 'not_empty');
+});
+test('impor menolak berkas yang bukan berkas akun / rusak', async () => {
+  const a = await seeded(), good = JSON.parse(JSON.stringify(Auth.exportAccounts(a)));
+  const bad = fn => { const f = JSON.parse(JSON.stringify(good)); fn(f); return rejects(Promise.resolve().then(() => Auth.importAccounts(Auth.emptyAuth(), f)), 'bad_file'); };
+  await rejects(Promise.resolve().then(() => Auth.importAccounts(Auth.emptyAuth(), { cadangan: 1 })), 'bad_file');
+  await rejects(Promise.resolve().then(() => Auth.importAccounts(Auth.emptyAuth(), null)), 'bad_file');
+  await bad(f => { f.app = 'lain'; });
+  await bad(f => { f.v = 2; });
+  await bad(f => { f.users = []; });
+  await bad(f => { f.users[1].email = 'rina@numind.id'; });           // email ganda
+  await bad(f => { f.users[1].id = f.users[0].id; });                 // id ganda
+  await bad(f => { f.users[0].id = '<script>'; });
+  await bad(f => { f.users[0].pw.hash = 'AAAA'; });                   // panjang hash salah
+  await bad(f => { f.users[0].pw.iter = 1; });                        // iterasi terlalu rendah
+  await bad(f => { f.users[0].pw.iter = 'banyak'; });
+  await bad(f => { f.users[0].email = 'bukan-email'; });
+  await bad(f => { f.users[0].name = ''; });
+  await bad(f => { for (const u of f.users) u.admin = false; });      // tanpa administrator
+  await bad(f => { for (const u of f.users) if (u.admin) u.disabled = true; });   // administrator semua nonaktif
+});
+test('impor membersihkan isian aneh: peran tak dikenal → Team; bidang tambahan dibuang; sesi lama tak berlaku', async () => {
+  const a = await seeded(), f = JSON.parse(JSON.stringify(Auth.exportAccounts(a)));
+  f.users[1].role = 'root'; f.users[1].extra = { x: 1 }; f.users[1].sv = 99; f.users[1].admin = 'true';
+  const b = Auth.emptyAuth(); Auth.importAccounts(b, f);
+  const u = b.users[1];
+  assert.strictEqual(u.role, 'producer'); assert.ok(!('extra' in u)); assert.strictEqual(u.sv, 1); assert.strictEqual(u.admin, false);
+});
+test('berkas akun lolos validateAuth dan serialisasi JSON', async () => {
+  const a = await seeded(), b = Auth.emptyAuth(); Auth.importAccounts(b, JSON.parse(JSON.stringify(Auth.exportAccounts(a))));
+  const c = Auth.validateAuth(JSON.parse(JSON.stringify(b)));
+  assert.strictEqual(c.users.length, 3); assert.ok(await lg(c, 'budi@numind.id', 'rahasia-budi-1'));
+});
+
 (async () => {
   for (const [name, fn] of tests) {
     try { await fn(); pass++; console.log('  ok   ' + name); }

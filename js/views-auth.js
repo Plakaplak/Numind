@@ -9,6 +9,10 @@
   const ROLE_LABEL = Core.ROLES;
   const ROLE_TONE = { producer: 'blue', finance: 'violet', director: 'green' };
   const ROLE_INFO = { producer: 'Mencatat pengeluaran dan mengajukan reimbursement', finance: 'Memeriksa nota, menyetujui, dan mencatat pembayaran', director: 'Menyetujui pengajuan dan melihat seluruh laporan' };
+  // Kode administrator: hash dari js/config.js. Bila berkas itu tidak termuat, nilainya false → pembuatan akun pertama ditolak (gagal tertutup).
+  const CFG = window.KASPROYEK_CONFIG;
+  const SETUP = CFG && CFG.adminSetup !== undefined ? CFG.adminSetup : false;
+  const GATED = SETUP !== null;
   let auth = Auth.emptyAuth();
   let notice = '';
   let inflight = 0;          // > 0 saat ada proses yang sedang mengubah data akun; pemuatan ulang ditahan dulu
@@ -38,7 +42,7 @@
   AuthUI.gate = () => {
     const u = current();
     lastSig = sig(u);
-    if (!u) { App.leave(); renderAuth(auth.users.length ? (screen.mode === 'register' && auth.allowSignup ? 'register' : 'login') : 'first'); return; }
+    if (!u) { App.leave(); renderAuth(auth.users.length ? (screen.mode === 'register' && auth.allowSignup ? 'register' : 'login') : (screen.mode === 'first' ? 'first' : 'login')); return; }
     if (u.mustChange) { App.leave(); renderAuth('change'); return; }
     screen.mode = 'login';                          // setelah keluar nanti, mulai dari tab Masuk
     const pub = Auth.publicUser(u);
@@ -80,30 +84,37 @@
     screen.mode = mode;
     const hasData = !!(window.App && App.state && (App.state.projects.length || App.state.transactions.length));
     let tabs = '', body = '';
-    if (mode === 'login' || mode === 'register') {
-      tabs = auth.allowSignup
-        ? '<div class="seg auth-tabs" role="tablist"><button type="button" role="tab" class="' + (mode === 'login' ? 'on' : '') + '" aria-selected="' + (mode === 'login') + '" data-act="auth-tab" data-mode="login">Masuk</button><button type="button" role="tab" class="' + (mode === 'register' ? 'on' : '') + '" aria-selected="' + (mode === 'register') + '" data-act="auth-tab" data-mode="register">Daftar</button></div>' : '';
+    const empty = !auth.users.length;
+    if (mode === 'login' || mode === 'register' || mode === 'first') {
+      const second = empty ? ['first', 'Akun pertama'] : auth.allowSignup ? ['register', 'Daftar'] : null;
+      tabs = second
+        ? '<div class="seg auth-tabs" role="tablist"><button type="button" role="tab" class="' + (mode === 'login' ? 'on' : '') + '" aria-selected="' + (mode === 'login') + '" data-act="auth-tab" data-mode="login">Masuk</button><button type="button" role="tab" class="' + (mode !== 'login' ? 'on' : '') + '" aria-selected="' + (mode !== 'login') + '" data-act="auth-tab" data-mode="' + second[0] + '">' + second[1] + '</button></div>' : '';
     }
     if (mode === 'login') {
       body = '<h1>Masuk</h1><p class="auth-sub">Gunakan akun Anda untuk membuka KasProyek.</p>' +
         (notice ? '<div class="auth-note" role="status">' + esc(notice) + '</div>' : '') +
+        (empty ? '<div class="auth-note" role="status"><b>Perangkat ini belum punya akun.</b> Akun disimpan per perangkat. Punya berkas akun dari administrator? Impor di bawah. Pertama kali memakai KasProyek? <button type="button" class="link-btn" data-act="auth-tab" data-mode="first">Buat akun administrator pertama</button>.</div>' : '') +
         '<form data-form="auth-login" novalidate>' +
         textField('email', 'Email', { type: 'email', ac: 'username' }) + pwField('password', 'Kata sandi', { ac: 'current-password' }) + remember + errBox +
         '<button class="btn btn-primary btn-lg btn-block" type="submit">Masuk</button></form>' +
         '<p class="auth-links"><button type="button" class="link-btn" data-act="auth-forgot">Lupa kata sandi?</button></p>' +
-        (auth.allowSignup ? '' : '<p class="auth-links muted small">Pendaftaran mandiri sedang ditutup. Minta administrator membuatkan akun.</p>');
+        (empty ? '<hr class="sep"><p class="small muted auth-import-lead">Sudah punya akun di perangkat lain?</p><label class="btn btn-block file-btn">' + icon('upload') + 'Impor akun dari berkas<input class="sr-only" type="file" accept="application/json,.json" data-change="auth-import"></label><p class="small muted auth-import-note">Berkasnya diunduh administrator dari halaman Pengguna di perangkat tempat akun dibuat.</p>'
+          : auth.allowSignup ? '' : '<p class="auth-links muted small">Pendaftaran mandiri sedang ditutup. Minta administrator membuatkan akun.</p>');
     } else if (mode === 'register') {
       body = '<h1>Daftar</h1><p class="auth-sub">Akun baru dimulai sebagai Team. Administrator dapat mengubah peran Anda.</p>' +
         '<form data-form="auth-register" novalidate>' + textField('name', 'Nama lengkap', { ac: 'name', max: 60 }) + textField('email', 'Email', { type: 'email', ac: 'username' }) +
         pwField('password', 'Kata sandi', { ac: 'new-password', hint: 'minimal 8 karakter', input: 'pw-hint', meter: true }) + pwField('password2', 'Ulangi kata sandi', { ac: 'new-password' }) + remember + errBox +
         '<button class="btn btn-primary btn-lg btn-block" type="submit">Daftar dan masuk</button></form>';
     } else if (mode === 'first') {
-      body = '<h1>Buat akun pertama</h1><p class="auth-sub">Akun ini menjadi administrator. Anda yang mengatur akun orang lain nanti.</p>' +
+      const codeField = GATED ? '<label class="field"><span>Kode administrator</span><input name="setupCode" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="40" placeholder="XXXX-XXXX-XXXX" required>' +
+        '<small class="field-note">' + esc(CFG && CFG.setupHint || 'Tidak punya kode? Hubungi pengelola aplikasi.') + '</small></label>' : '';
+      body = '<h1>Buat akun administrator</h1><p class="auth-sub">Akun pertama menjadi administrator, jadi' + (GATED ? ' perlu kode dari pengelola aplikasi' : ' Anda yang mengatur akun orang lain nanti') + '. Anggota tim lain tidak mendaftar di sini: minta administrator menambahkan akun Anda.</p>' +
         (hasData ? '<div class="auth-note" role="status">Data yang sudah ada di perangkat ini tetap utuh dan terbuka setelah Anda masuk.</div>' : '') +
-        '<form data-form="auth-register" novalidate>' + textField('name', 'Nama lengkap', { ac: 'name', max: 60 }) + textField('email', 'Email', { type: 'email', ac: 'username' }) +
+        '<form data-form="auth-register" novalidate>' + codeField + textField('name', 'Nama lengkap', { ac: 'name', max: 60 }) + textField('email', 'Email', { type: 'email', ac: 'username' }) +
         '<div class="field"><span>Peran Anda <em>bisa diubah nanti</em></span>' + roleSeg('role', 'director') + '</div>' +
         pwField('password', 'Kata sandi', { ac: 'new-password', hint: 'minimal 8 karakter', input: 'pw-hint', meter: true }) + pwField('password2', 'Ulangi kata sandi', { ac: 'new-password' }) + remember + errBox +
-        '<button class="btn btn-primary btn-lg btn-block" type="submit">Buat akun dan masuk</button></form>';
+        '<button class="btn btn-primary btn-lg btn-block" type="submit">Buat akun dan masuk</button></form>' +
+        '<p class="auth-links">Sudah punya akun? <button type="button" class="link-btn" data-act="auth-tab" data-mode="login">Masuk</button></p>';
     } else if (mode === 'change') {
       const u = current();
       body = '<h1>Buat kata sandi baru</h1><p class="auth-sub">' + (u ? esc(u.name) + ', administrator' : 'Administrator') + ' mengatur kata sandi Anda. Pilih yang hanya Anda yang tahu.</p>' +
@@ -118,7 +129,7 @@
       '<div class="auth-pitch"><h2>Satu nota, satu penggantian.</h2>' +
       '<ul><li>' + icon('camera') + '<span>Foto nota sekarang, lengkapi datanya nanti.</span></li><li>' + icon('shield') + '<span>Setiap transaksi hanya bisa masuk satu pengajuan.</span></li><li>' + icon('wallet') + '<span>Tetap bisa dipakai tanpa internet.</span></li></ul></div></aside>' +
       '<main class="auth-main"><div class="auth-card">' + tabs + body + '</div></main></div>';
-    document.title = (mode === 'login' ? 'Masuk' : mode === 'change' ? 'Kata sandi baru' : 'Daftar') + ' — KasProyek';
+    document.title = (mode === 'login' ? 'Masuk' : mode === 'change' ? 'Kata sandi baru' : mode === 'first' ? 'Akun pertama' : 'Daftar') + ' — KasProyek';
     const first = r.querySelector('input:not([type=radio]):not([type=checkbox])');
     if (first && !matchMedia('(pointer: coarse)').matches) first.focus();
   }
@@ -178,7 +189,9 @@
     const f = new FormData(form); H.formError(form, '');
     const u = await run(form, 'Membuat akun…', async () => {
       same(f.get('password'), f.get('password2'));
-      const user = await Auth.register(auth, { name: f.get('name'), email: f.get('email'), password: f.get('password'), password2: f.get('password2'), role: f.get('role') }, {});
+      let user, e0;
+      try { user = await Auth.register(auth, { name: f.get('name'), email: f.get('email'), password: f.get('password'), password2: f.get('password2'), role: f.get('role'), setupCode: f.get('setupCode') }, { setup: SETUP }); } catch (e) { e0 = e; }
+      if (e0) { if (e0.code === 'setup_code' || e0.code === 'locked') { try { await AuthUI.save(); } catch (e) { console.warn('Gagal menyimpan hitungan kode', e); } } throw e0; }   // percobaan kode yang salah ikut tersimpan
       user.lastLoginAt = Date.now();
       await commit();
       return user;
@@ -186,6 +199,17 @@
     writeSession(Auth.makeSession(u, { remember: !!f.get('remember') }));
     AuthUI.gate();
     UI.toast('Selamat datang, ' + u.name.split(' ')[0] + '.', 'success');
+  };
+  /** Muat berkas akun (dari administrator) ke perangkat yang masih kosong. */
+  Change['auth-import'] = async el => {
+    const file = el.files && el.files[0]; el.value = '';
+    if (!file) return;
+    const bad = () => new Auth.AuthError('Berkas tidak bisa dibaca. Pilih berkas .json yang diunduh dari halaman Pengguna.', 'bad_file');
+    if (file.size > 2 * 1024 * 1024) throw bad();
+    let obj; try { obj = JSON.parse(await file.text()); } catch (e) { throw bad(); }
+    const n = await run(null, '', async () => { const c = Auth.importAccounts(auth, obj); await commit(); return c; });
+    notice = n + ' akun dimuat. Masuk dengan email dan kata sandi Anda.';
+    screen.mode = 'login'; AuthUI.gate();
   };
   Forms['auth-change'] = async form => {
     const sess = readSession(), f = new FormData(form); H.formError(form, '');
@@ -208,7 +232,7 @@
       title: 'Lupa kata sandi', cls: 'dlg-small',
       html: '<p>Kata sandi disimpan sebagai hash dan tidak bisa dilihat siapa pun, termasuk administrator. Cara mengaturnya ulang:</p>' +
         '<ol class="plain-steps"><li>Minta administrator membuka <b>Pengguna</b>, memilih nama Anda, lalu <b>Atur ulang kata sandi</b>.</li><li>Masuk dengan kata sandi sementara itu. Anda langsung diminta membuat kata sandi baru.</li></ol>' +
-        '<details class="forgot-last"><summary>Administrator lupa dan tidak ada administrator lain</summary><p>Satu-satunya jalan adalah menghapus semua data di perangkat ini, termasuk akun. Setelah itu aplikasi kosong dan Anda membuat akun pertama lagi. Data bisa dipulihkan dari berkas cadangan JSON (Export Data) bila Anda punya.</p><button class="btn btn-danger btn-sm" data-act="auth-wipe">' + icon('trash') + 'Hapus semua data di perangkat ini</button></details>',
+        '<details class="forgot-last"><summary>Administrator lupa dan tidak ada administrator lain</summary><p>Satu-satunya jalan adalah menghapus semua data di perangkat ini, termasuk akun. Setelah itu aplikasi kosong dan Anda membuat akun administrator lagi (perlu kode administrator dari pengelola, atau impor berkas akun). Data bisa dipulihkan dari berkas cadangan JSON (Export Data) bila Anda punya.</p><button class="btn btn-danger btn-sm" data-act="auth-wipe">' + icon('trash') + 'Hapus semua data di perangkat ini</button></details>',
       footer: '<button class="btn btn-primary" data-act="dlg-close">Mengerti</button>'
     });
   };
@@ -280,10 +304,17 @@
       '<td data-label="Status">' + (u.disabled ? '<span class="pill gray">Nonaktif</span>' : u.mustChange ? '<span class="pill amber">Belum ganti kata sandi</span>' : '<span class="pill green">Aktif</span>') + '</td>' +
       '<td class="c-act"><button class="btn btn-sm" data-act="user-manage" data-id="' + u.id + '">Kelola</button></td></tr>').join('');
     return H.pageHead('Pengguna', us.length + ' akun · ' + Auth.activeAdmins(auth).length + ' administrator',
-      '<button class="btn btn-primary" data-act="user-add">' + icon('plus') + 'Tambah pengguna</button>') +
-      H.banner('info', 'info', 'Akun tersimpan di perangkat ini. Perangkat lain tidak berbagi akun maupun data, dan perubahan peran berlaku saat pengguna itu masuk lagi.') +
+      '<button class="btn" data-act="accounts-export">' + icon('download') + 'Ekspor akun</button><button class="btn btn-primary" data-act="user-add">' + icon('plus') + 'Tambah pengguna</button>') +
+      H.banner('info', 'info', 'Akun tersimpan di perangkat ini. Perangkat lain tidak berbagi akun maupun data. Untuk memakai akun yang sama di perangkat lain, pilih <b>Ekspor akun</b>, lalu impor berkasnya di layar Masuk perangkat itu.') +
       '<div class="card mb" style="margin:16px 0"><label class="check"><input type="checkbox" data-change="signup-toggle"' + (auth.allowSignup ? ' checked' : '') + '><span><b>Izinkan orang mendaftar sendiri</b> <small class="muted">Matikan setelah semua anggota tim punya akun. Administrator tetap bisa menambah akun.</small></span></label></div>' +
       '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Pengguna</th><th>Peran</th><th>Terakhir masuk</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  };
+  Act['accounts-export'] = async () => {
+    if (!me() || !me().admin) return;
+    if (!(await UI.confirmBox({ title: 'Ekspor akun?', html: '<p>Berkas ini memuat <b>hash kata sandi semua pengguna</b>. Kata sandi aslinya tidak ikut, tetapi berkasnya tetap sensitif: kirim hanya ke anggota tim lewat jalur yang tepercaya, dan jangan unggah ke tempat umum.</p><p class="muted mt">Perangkat tujuan harus masih kosong. Setelah dipindah, akun di tiap perangkat berjalan sendiri-sendiri: kata sandi atau peran yang diubah di satu perangkat tidak ikut berubah di perangkat lain.</p>', okText: 'Unduh berkas akun' }))) return;
+    await AuthUI.load();
+    UI.download('kasproyek-akun-' + Core.todayStr() + '.json', JSON.stringify(Auth.exportAccounts(auth), null, 2), 'application/json');
+    UI.toast('Berkas akun diunduh. Simpan dengan hati-hati.', 'success');
   };
   Change['signup-toggle'] = async el => {
     const allow = el.checked;

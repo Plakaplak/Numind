@@ -20,6 +20,8 @@
   const FAILS_PER_LOCK = 5;           // setiap 5 kegagalan beruntun → kunci sementara
   const LOCK_BASE_SEC = 30, LOCK_MAX_SEC = 900;
   const SESSION_REMEMBER_DAYS = 30, SESSION_SHORT_HOURS = 12;
+  const SETUP_KEY = '#setup';           // kunci hitungan percobaan kode administrator (email selalu mengandung @, jadi tidak bentrok)
+  const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // 32 huruf/angka tanpa I, O, 0, 1 supaya tidak membingungkan
 
   class AuthError extends Error {
     constructor(message, code, extra) { super(message); this.name = 'AuthError'; this.code = code; if (extra) Object.assign(this, extra); }
@@ -58,6 +60,28 @@
     const a = webcrypto().getRandomValues(new Uint8Array(9));
     return 'usr_' + [...a].map(x => x.toString(36).padStart(2, '0')).join('').slice(0, 12);
   }
+
+  /* ---------- Kode administrator ----------
+     Akun administrator pertama hanya bisa dibuat oleh orang yang memegang kode ini. Aplikasi hanya menyimpan
+     hash-nya (js/config.js). Ini pagar kebijakan, bukan brankas: karena semuanya berjalan di perangkat,
+     orang yang paham alat pengembang bisa mengubah config.js di salinannya sendiri. */
+  const normCode = c => String(c == null ? '' : c).normalize('NFKC').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  function generateSetupCode() {
+    const a = webcrypto().getRandomValues(new Uint8Array(12));
+    let s = ''; for (let i = 0; i < 12; i++) { s += CODE_ALPHABET[a[i] % 32]; if (i % 4 === 3 && i < 11) s += '-'; }
+    return s;
+  }
+  /** Hash kode untuk disimpan di config.js: {salt, hash, iter}. */
+  async function makeSetupGate(code, iterations) {
+    const n = normCode(code);
+    if (n.length < 8) throw err('Kode administrator minimal 8 huruf atau angka.', 'setup_code');
+    return makePw(n, iterations);
+  }
+  async function checkSetupCode(gate, code) {
+    const n = normCode(code);
+    return n.length >= 8 && verifyPw(n, gate);
+  }
+  const validGate = g => !!(g && typeof g.salt === 'string' && typeof g.hash === 'string' && g.iter > 0);
 
   /* ---------- Validasi ---------- */
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -122,6 +146,17 @@
     let role = 'producer', admin = false, mustChange = false, createdBy = null;
     if (first) {
       role = ROLES.includes(d.role) ? d.role : 'director'; admin = true;
+      if (o.setup !== undefined && o.setup !== null) {   // akun pertama = administrator, jadi butuh kode dari pengelola
+        if (!validGate(o.setup)) throw err('Pengaturan kode administrator rusak atau tidak termuat. Hubungi pengelola aplikasi.', 'setup_config');   // gagal tertutup, bukan terbuka
+        const wait = lockLeft(auth, SETUP_KEY, now);
+        if (wait) throw err('Terlalu banyak percobaan kode. Coba lagi dalam ' + fmtWait(wait) + '.', 'locked', { retryAfter: wait, field: 'setupCode' });
+        if (!normCode(d.setupCode)) throw err('Isi kode administrator. Kode diberikan oleh pengelola aplikasi.', 'setup_code', { field: 'setupCode' });
+        if (!(await checkSetupCode(o.setup, d.setupCode))) {
+          const left = noteFail(auth, SETUP_KEY, now), w2 = lockLeft(auth, SETUP_KEY, now);
+          throw err(w2 ? 'Terlalu banyak percobaan kode. Coba lagi dalam ' + fmtWait(w2) + '.' : 'Kode administrator salah.' + (left <= 2 ? ' Sisa ' + left + ' percobaan sebelum dikunci sementara.' : ''), w2 ? 'locked' : 'setup_code', { retryAfter: w2, field: 'setupCode' });
+        }
+        delete auth.attempts[SETUP_KEY];
+      }
     } else if (o.by) {
       const a = needAdmin(auth, o.by);
       role = ROLES.includes(d.role) ? d.role : 'producer'; admin = !!d.admin; mustChange = true; createdBy = a.id;
@@ -161,6 +196,7 @@
     const now = clock(o);
     email = normEmail(email);
     if (!email || !password) throw err('Isi email dan kata sandi.', 'missing', { field: email ? 'password' : 'email' });
+    if (!auth.users.length) throw err('Belum ada akun di perangkat ini. Akun disimpan per perangkat: impor berkas akun dari administrator, atau buat akun pertama dengan kode administrator.', 'no_accounts');
     const wait = lockLeft(auth, email, now);
     if (wait) throw err('Terlalu banyak percobaan. Coba lagi dalam ' + fmtWait(wait) + '.', 'locked', { retryAfter: wait });
     const u = auth.users.find(x => x.email === email);
@@ -243,11 +279,45 @@
   }
   function setAllowSignup(auth, adminId, allow) { needAdmin(auth, adminId); auth.allowSignup = !!allow; return auth; }
 
+  /* ---------- Pindah akun antar perangkat ---------- */
+  const ACCOUNT_FILE = 'kasproyek-akun';
+  /** Isi berkas akun. PERINGATAN: memuat hash kata sandi semua pengguna. Sampaikan hanya lewat jalur tepercaya. */
+  function exportAccounts(auth, o) {
+    return {
+      app: ACCOUNT_FILE, v: 1, exportedAt: clock(o), allowSignup: auth.allowSignup !== false,
+      users: auth.users.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role, admin: !!u.admin, disabled: !!u.disabled, mustChange: !!u.mustChange, pw: { salt: u.pw.salt, hash: u.pw.hash, iter: u.pw.iter }, createdAt: u.createdAt || 0, createdBy: u.createdBy || null, lastLoginAt: u.lastLoginAt || null }))
+    };
+  }
+  const isB64Len = (s, n) => { try { return typeof s === 'string' && unb64(s).length === n; } catch (e) { return false; } };
+  /** Muat berkas akun ke perangkat yang belum punya akun. Berkas harus memuat minimal satu administrator aktif. */
+  function importAccounts(auth, file) {
+    if (auth.users.length) throw err('Perangkat ini sudah punya akun. Impor hanya untuk perangkat yang masih kosong.', 'not_empty');
+    if (!file || typeof file !== 'object' || file.app !== ACCOUNT_FILE || file.v !== 1 || !Array.isArray(file.users)) throw err('Ini bukan berkas akun KasProyek. Pilih berkas yang diekspor dari halaman Pengguna.', 'bad_file');
+    if (file.users.length === 0 || file.users.length > 500) throw err('Berkas akun kosong atau terlalu besar.', 'bad_file');
+    const seen = new Set(), seenId = new Set(), users = [];
+    for (const r of file.users) {
+      const email = normEmail(r && r.email);
+      if (!r || typeof r !== 'object' || !EMAIL_RE.test(email) || seen.has(email)) throw err('Berkas akun rusak: data pengguna tidak lengkap.', 'bad_file');
+      const id = String(r.id || '');
+      if (!/^usr_[a-z0-9]{6,20}$/.test(id) || seenId.has(id)) throw err('Berkas akun rusak: ada ID pengguna yang tidak valid.', 'bad_file');
+      const pw = r.pw;
+      if (!pw || !isB64Len(pw.salt, 16) || !isB64Len(pw.hash, 32) || !Number.isInteger(pw.iter) || pw.iter < 1000 || pw.iter > 5000000) throw err('Berkas akun rusak: data kata sandi tidak valid.', 'bad_file');
+      const num = v => (Number.isFinite(v) && v >= 0 ? v : 0);
+      let name; try { name = checkName(r.name); } catch (e) { throw err('Berkas akun rusak: ada pengguna tanpa nama yang valid.', 'bad_file'); }
+      seen.add(email); seenId.add(id);
+      users.push({ id, name, email, role: ROLES.includes(r.role) ? r.role : 'producer', admin: r.admin === true, pw: { salt: pw.salt, hash: pw.hash, iter: pw.iter }, mustChange: r.mustChange === true, disabled: r.disabled === true, sv: 1, createdAt: num(r.createdAt), createdBy: typeof r.createdBy === 'string' ? r.createdBy : null, lastLoginAt: r.lastLoginAt ? num(r.lastLoginAt) : null });
+    }
+    if (!users.some(u => u.admin && !u.disabled)) throw err('Berkas akun ini tidak punya administrator aktif, jadi tidak dimuat.', 'bad_file');
+    auth.users = users; auth.allowSignup = file.allowSignup !== false; auth.attempts = {};
+    return users.length;
+  }
+
   return {
     ROLES, ITERATIONS, AuthError, SESSION_REMEMBER_DAYS,
     emptyAuth, validateAuth, publicUser, findById, activeAdmins,
     normEmail, passwordIssue, EMAIL_RE,
     register, login, makeSession, resolveSession, lockLeft,
+    normCode, generateSetupCode, makeSetupGate, checkSetupCode, exportAccounts, importAccounts,
     changePassword, updateProfile, resetPassword, setRole, setDisabled, removeUser, setAllowSignup
   };
 });

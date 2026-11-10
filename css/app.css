@@ -566,3 +566,11 @@ body:not([data-auth="in"]) .bottom-nav { display: none !important; }
   .auth-main { align-items: start; padding: 24px 16px calc(28px + env(safe-area-inset-bottom)); }
   .auth-card { padding: 24px 20px; }
 }
+
+/* Kode administrator dan impor akun di layar awal */
+.field-note { display: block; font-size: 13px; color: var(--muted); }
+.auth-import-lead { margin: 0 0 8px; text-align: center; }
+.auth-import-note { margin: 8px 0 0; text-align: center; }
+.file-btn { cursor: pointer; justify-content: center; }
+.file-btn:focus-within { outline: 2px solid var(--blue); outline-offset: 2px; }
+.auth-card .sep { margin: 20px 0 14px; }
